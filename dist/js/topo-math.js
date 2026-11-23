@@ -283,50 +283,20 @@ const TopoMath = {
 
     const boxPos = this.getCoordinates(boxRow, boxCol, dx, dy);
 
-    // Check if any stake in the enclosing quadrant has a custom design elevation override
-    if (stakes && stakes.length > 0) {
-      // Find enclosing cell index
-      let c = Math.floor(x / dx);
-      let r = Math.floor(y / dy);
-
-      // Clamp to valid quadrant range
-      c = Math.max(0, Math.min(cols - 2, c));
-      r = Math.max(0, Math.min(rows - 2, r));
-
-      const stakeMap = new Map();
-      stakes.forEach(s => stakeMap.set(`${s.row}_${s.col}`, s));
-
-      const q00 = stakeMap.get(`${r}_${c}`);
-      const q10 = stakeMap.get(`${r}_${c + 1}`);
-      const q01 = stakeMap.get(`${r + 1}_${c}`);
-      const q11 = stakeMap.get(`${r + 1}_${c + 1}`);
-
-      if (q00 && q10 && q01 && q11) {
-        const hasCustom = q00.isCustomDesign || q10.isCustomDesign || q01.isCustomDesign || q11.isCustomDesign;
-
-        if (hasCustom) {
-          // Perform Bilinear Interpolation
-          const x0 = c * dx;
-          const y0 = r * dy;
-          const u = Math.max(0, Math.min(1, (x - x0) / dx));
-          const v = Math.max(0, Math.min(1, (y - y0) / dy));
-
-          const z00 = q00.designElevation;
-          const z10 = q10.designElevation;
-          const z01 = q01.designElevation;
-          const z11 = q11.designElevation;
-
-          const interpolatedZ = (1 - u) * (1 - v) * z00 +
-                                u * (1 - v) * z10 +
-                                (1 - u) * v * z01 +
-                                u * v * z11;
-
+    // Check if any stake has a custom design elevation override
+    if (stakes && stakes.length >= 3) {
+      const hasCustom = stakes.some(s => s.isCustomDesign);
+      if (hasCustom) {
+        // Attempt TIN interpolation first
+        const tin = this.computeDelaunayTIN(stakes);
+        const tinRes = this.interpolateTIN(x, y, stakes, tin.triangles);
+        if (tinRes) {
           return {
-            elevation: Math.round(interpolatedZ * 1000) / 1000,
-            method: 'Interpolación Bilineal',
-            isBilinear: true,
-            quadrant: [q00.code, q10.code, q01.code, q11.code],
-            weights: { u: Math.round(u * 100), v: Math.round(v * 100) }
+            elevation: tinRes.elevation,
+            method: tinRes.method,
+            isTIN: true,
+            triangle: tinRes.triangle,
+            weights: tinRes.weights
           };
         }
       }
@@ -368,6 +338,299 @@ const TopoMath = {
 
     if (parts.length === 0) return `${stakeCode} (En Estaca)`;
     return `${stakeCode} (${parts.join(', ')})`;
+  },
+
+  // Distance between two points in meters
+  distance(p1, p2) {
+    return Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  },
+
+  // Trilateration / Circle-Circle Intersection from 2 stakes with tape measure
+  // Returns { success: boolean, x, y, error }
+  solveTrilateration(p1, d1, p2, d2, side = 'derecha') {
+    const D = this.distance(p1, p2);
+    if (D < 0.001) {
+      return { success: false, error: 'Las dos estacas están en el mismo punto' };
+    }
+    if (d1 + d2 < D - 0.005) {
+      return {
+        success: false,
+        error: `Las distancias no se alcanzan con cinta (Suma: ${(d1 + d2).toFixed(2)}m < Distancia entre estacas: ${D.toFixed(2)}m)`
+      };
+    }
+    if (Math.abs(d1 - d2) > D + 0.005) {
+      return {
+        success: false,
+        error: `Una distancia es demasiado corta respecto a la otra para intersectar (Diferencia: ${Math.abs(d1 - d2).toFixed(2)}m > ${D.toFixed(2)}m)`
+      };
+    }
+
+    const a = (d1 * d1 - d2 * d2 + D * D) / (2 * D);
+    const hSq = d1 * d1 - a * a;
+    const h = Math.sqrt(Math.max(0, hSq));
+
+    // Unit vector from p1 to p2
+    const ux = (p2.x - p1.x) / D;
+    const uy = (p2.y - p1.y) / D;
+
+    // Perpendicular vector to the right (looking from p1 to p2 in +Y forward screen system)
+    const vrx = -uy;
+    const vry = ux;
+
+    // Point along base line
+    const p0x = p1.x + a * ux;
+    const p0y = p1.y + a * uy;
+
+    let resX, resY;
+    const isRight = (side.toLowerCase() === 'derecha' || side.toLowerCase() === 'right');
+
+    if (isRight) {
+      // Derecha respecto al vector p1 -> p2 (+vr)
+      resX = p0x + h * vrx;
+      resY = p0y + h * vry;
+    } else {
+      // Izquierda respecto al vector p1 -> p2 (-vr)
+      resX = p0x - h * vrx;
+      resY = p0y - h * vry;
+    }
+
+    return {
+      success: true,
+      x: Math.round(resX * 1000) / 1000,
+      y: Math.round(resY * 1000) / 1000,
+      baseDist: D,
+      sideChosen: isRight ? 'Derecha' : 'Izquierda'
+    };
+  },
+
+  // 2D Delaunay Triangulation (Bowyer-Watson Algorithm)
+  // Input: array of points [{ id, x, y, ... }]
+  // Output: { triangles: [[idx0, idx1, idx2]], edges: [[idx0, idx1]] }
+  computeDelaunayTIN(points) {
+    if (!points || points.length < 3) {
+      return { triangles: [], edges: [] };
+    }
+
+    const n = points.length;
+    // Find bounding box
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < n; i++) {
+      if (points[i].x < minX) minX = points[i].x;
+      if (points[i].x > maxX) maxX = points[i].x;
+      if (points[i].y < minY) minY = points[i].y;
+      if (points[i].y > maxY) maxY = points[i].y;
+    }
+
+    const dx = (maxX - minX) * 2 || 100;
+    const dy = (maxY - minY) * 2 || 100;
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+
+    // Super-triangle vertices added at indices n, n+1, n+2
+    const allPts = points.slice();
+    allPts.push({ x: midX - 2 * dx, y: midY - dy, isSuper: true });
+    allPts.push({ x: midX, y: midY + 2 * dy, isSuper: true });
+    allPts.push({ x: midX + 2 * dx, y: midY - dy, isSuper: true });
+
+    let triangles = [[n, n + 1, n + 2]];
+
+    // Circumcircle test helper
+    const inCircumcircle = (p, t) => {
+      const p1 = allPts[t[0]];
+      const p2 = allPts[t[1]];
+      const p3 = allPts[t[2]];
+
+      const d = 2 * (p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y));
+      if (Math.abs(d) < 1e-9) return false;
+
+      const p1Sq = p1.x * p1.x + p1.y * p1.y;
+      const p2Sq = p2.x * p2.x + p2.y * p2.y;
+      const p3Sq = p3.x * p3.x + p3.y * p3.y;
+
+      const cx = (p1Sq * (p2.y - p3.y) + p2Sq * (p3.y - p1.y) + p3Sq * (p1.y - p2.y)) / d;
+      const cy = (p1Sq * (p3.x - p2.x) + p2Sq * (p1.x - p3.x) + p3Sq * (p2.x - p1.x)) / d;
+      const rSq = (p1.x - cx) * (p1.x - cx) + (p1.y - cy) * (p1.y - cy);
+
+      const distSq = (p.x - cx) * (p.x - cx) + (p.y - cy) * (p.y - cy);
+      return distSq <= rSq + 1e-7;
+    };
+
+    // Incremental insertion of each point
+    for (let i = 0; i < n; i++) {
+      const p = allPts[i];
+      const badTriangles = [];
+
+      for (let j = 0; j < triangles.length; j++) {
+        if (inCircumcircle(p, triangles[j])) {
+          badTriangles.push(triangles[j]);
+        }
+      }
+
+      // Find boundary of polygonal hole
+      const polygon = [];
+      for (let j = 0; j < badTriangles.length; j++) {
+        const tri = badTriangles[j];
+        const triEdges = [
+          [tri[0], tri[1]],
+          [tri[1], tri[2]],
+          [tri[2], tri[0]]
+        ];
+
+        for (let e = 0; e < 3; e++) {
+          const edge = triEdges[e];
+          let isShared = false;
+          for (let k = 0; k < badTriangles.length; k++) {
+            if (j === k) continue;
+            const other = badTriangles[k];
+            const otherEdges = [
+              [other[0], other[1]],
+              [other[1], other[2]],
+              [other[2], other[0]]
+            ];
+            for (let oe = 0; oe < 3; oe++) {
+              if ((edge[0] === otherEdges[oe][0] && edge[1] === otherEdges[oe][1]) ||
+                  (edge[0] === otherEdges[oe][1] && edge[1] === otherEdges[oe][0])) {
+                isShared = true;
+                break;
+              }
+            }
+            if (isShared) break;
+          }
+          if (!isShared) {
+            polygon.push(edge);
+          }
+        }
+      }
+
+      // Remove bad triangles
+      triangles = triangles.filter(t => !badTriangles.includes(t));
+
+      // Re-triangulate the hole connecting to point i
+      for (let j = 0; j < polygon.length; j++) {
+        triangles.push([polygon[j][0], polygon[j][1], i]);
+      }
+    }
+
+    // Filter out triangles containing any vertex of super-triangle
+    const finalTriangles = triangles.filter(t => t[0] < n && t[1] < n && t[2] < n);
+
+    // Collect unique edges with lengths
+    const edgeMap = new Map();
+    for (const t of finalTriangles) {
+      const pairs = [
+        [Math.min(t[0], t[1]), Math.max(t[0], t[1])],
+        [Math.min(t[1], t[2]), Math.max(t[1], t[2])],
+        [Math.min(t[2], t[0]), Math.max(t[2], t[0])]
+      ];
+      for (const [a, b] of pairs) {
+        const key = `${a}_${b}`;
+        if (!edgeMap.has(key)) {
+          const length = this.distance(points[a], points[b]);
+          edgeMap.set(key, { from: a, to: b, length: Math.round(length * 100) / 100 });
+        }
+      }
+    }
+
+    return {
+      triangles: finalTriangles,
+      edges: Array.from(edgeMap.values())
+    };
+  },
+
+  // Interpolate elevation inside a Delaunay Triangulated Irregular Network (TIN)
+  interpolateTIN(x, y, points, triangles) {
+    if (!triangles || triangles.length === 0 || !points || points.length === 0) {
+      return null;
+    }
+
+    for (const tri of triangles) {
+      const p1 = points[tri[0]];
+      const p2 = points[tri[1]];
+      const p3 = points[tri[2]];
+
+      const z1 = p1.designElevation ?? p1.elevation ?? 0;
+      const z2 = p2.designElevation ?? p2.elevation ?? 0;
+      const z3 = p3.designElevation ?? p3.elevation ?? 0;
+
+      // Barycentric coordinates
+      const det = (p2.y - p3.y) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.y - p3.y);
+      if (Math.abs(det) < 1e-9) continue;
+
+      const l1 = ((p2.y - p3.y) * (x - p3.x) + (p3.x - p2.x) * (y - p3.y)) / det;
+      const l2 = ((p3.y - p1.y) * (x - p3.x) + (p1.x - p3.x) * (y - p3.y)) / det;
+      const l3 = 1 - l1 - l2;
+
+      // Inside triangle check with small tolerance for boundary points
+      if (l1 >= -0.005 && l2 >= -0.005 && l3 >= -0.005) {
+        const interpolatedZ = l1 * z1 + l2 * z2 + l3 * z3;
+        return {
+          elevation: Math.round(interpolatedZ * 1000) / 1000,
+          method: 'Interpolación Triangular (TIN Delaunay)',
+          triangle: [p1.code, p2.code, p3.code],
+          weights: [Math.round(l1 * 100), Math.round(l2 * 100), Math.round(l3 * 100)]
+        };
+      }
+    }
+
+    return null;
+  },
+
+  // Rotate offset vector (dX, dY) by reference axis angle
+  // If lake axis is rotated by angleRad, local (dX_der, dY_adel) transforms to global (dX_g, dY_g)
+  rotateOffsetByAxis(dX, dY, axisAngleRad = 0) {
+    if (Math.abs(axisAngleRad) < 1e-6) {
+      return { dx: dX, dy: dY };
+    }
+    const cosA = Math.cos(axisAngleRad);
+    const sinA = Math.sin(axisAngleRad);
+    return {
+      dx: dX * cosA - dY * sinA,
+      dy: dX * sinA + dY * cosA
+    };
+  },
+
+  // Generates stakes array with either regular grid or variable row counts (e.g. "5, 7, 7, 7, 5")
+  generateStakes(projId, settings) {
+    const stakes = [];
+    const dx = settings.dx || 10;
+    const dy = settings.dy || 10;
+    const rowCounts = settings.rowPattern
+      ? settings.rowPattern.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+      : [];
+
+    const numRows = rowCounts.length > 0 ? rowCounts.length : (settings.rows || 5);
+
+    for (let r = 0; r < numRows; r++) {
+      const colsInRow = rowCounts.length > 0 ? rowCounts[r] : (settings.cols || 8);
+      for (let c = 0; c < colsInRow; c++) {
+        const code = this.getStakeCode(r, c);
+        const x = c * dx;
+        const y = r * dy;
+        const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+
+        stakes.push({
+          id: `${projId}_${r}_${c}`,
+          projId: projId,
+          row: r,
+          col: c,
+          code: code,
+          x: x,
+          y: y,
+          designElevation: designElev.elevation,
+          isCustomDesign: false,
+          reading: null,
+          measuredElevation: null,
+          stationId: null,
+          measuredAt: null,
+          cutFill: null,
+          status: 'PENDIENTE',
+          hasPuddleWarning: false,
+          puddleReason: null,
+          note: ''
+        });
+      }
+    }
+    return stakes;
   }
 };
 

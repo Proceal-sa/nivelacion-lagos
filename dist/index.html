@@ -116,6 +116,9 @@
               <div style="font-size: 0.75rem; color: var(--text-muted);" id="grid-tol-text">Tolerancia: ±2 cm</div>
             </div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button id="btn-toggle-edit-mode" class="btn btn-outline" style="min-height: 38px; padding: 6px 10px; font-size: 0.82rem;" title="Mover o replantear estacas libremente">
+                🛠️ Modo Replanteo: OFF
+              </button>
               <button id="btn-quick-offset" class="btn btn-primary" style="min-height: 38px; padding: 6px 12px; font-size: 0.85rem;" title="Medir rasante en cualquier punto del lago">
                 📐 Punto Intermedio (Desfase)
               </button>
@@ -126,8 +129,44 @@
           </div>
         </div>
 
-        <!-- Contenedor scrolleable de la malla de estacas -->
-        <div class="grid-wrapper" id="lake-grid-container">
+        <!-- Selector de Vista: Plano 2D Escala Real (TIN) vs Tabla -->
+        <div class="view-mode-bar">
+          <button id="view-mode-2d" class="view-mode-btn active" type="button">
+            <span>🗺️ Plano 2D Escala Real (TIN)</span>
+          </button>
+          <button id="view-mode-table" class="view-mode-btn" type="button">
+            <span>📋 Malla Cuadriculada</span>
+          </button>
+        </div>
+
+        <!-- Capas del Plano 2D -->
+        <div id="canvas-layer-controls" class="canvas-layer-toggles">
+          <label class="canvas-layer-toggle">
+            <input type="checkbox" id="chk-show-tin" checked> 🔺 Red TIN
+          </label>
+          <label class="canvas-layer-toggle">
+            <input type="checkbox" id="chk-show-distances" checked> 📏 Distancias (m)
+          </label>
+          <label class="canvas-layer-toggle">
+            <input type="checkbox" id="chk-show-flow" checked> 〰️ Flechas Drenaje
+          </label>
+        </div>
+
+        <!-- CONTENEDOR DE PLANO 2D ESCALA REAL (CANVAS INTERACTIVO) -->
+        <div id="canvas-2d-wrapper" class="canvas-2d-container">
+          <div id="canvas-edit-banner" class="canvas-mode-banner" style="display: none;">
+            <span>🛠️ MODO REPLANTEO ACTIVO: Arrastre o toque una estaca para moverla</span>
+          </div>
+          <div class="canvas-floating-controls">
+            <button id="canvas-btn-zoom-in" class="canvas-ctrl-btn" title="Acercar">+</button>
+            <button id="canvas-btn-zoom-out" class="canvas-ctrl-btn" title="Alejar">-</button>
+            <button id="canvas-btn-center" class="canvas-ctrl-btn" title="Centrar Vista">🎯</button>
+          </div>
+          <canvas id="lake-tin-canvas" class="tin-main-canvas" width="800" height="500"></canvas>
+        </div>
+
+        <!-- Contenedor scrolleable de la malla de estacas (Modo Tabla Tradicional) -->
+        <div class="grid-wrapper" id="lake-grid-container" style="display: none;">
           <table class="lake-grid-table" id="lake-grid-table">
             <!-- Generado dinámicamente -->
           </table>
@@ -175,10 +214,16 @@
               <div class="form-help">Máx 26 filas (A..Z)</div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="cfg-cols">Columnas (1, 2...):</label>
+              <label class="form-label" for="cfg-cols">Columnas Base (1, 2...):</label>
               <input type="number" id="cfg-cols" class="form-control" min="2" max="50" value="8">
               <div class="form-help">Ej. 8 columnas</div>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfg-row-pattern">Patrón de Estacas por Fila (Opcional - Lago Irregular):</label>
+            <input type="text" id="cfg-row-pattern" class="form-control" placeholder="Ej. 5, 7, 7, 7, 5" value="">
+            <div class="form-help">Dejar vacío para malla regular, o especificar cuántas estacas lleva cada fila (ej. A=5, B=7, C=7, D=7, E=5)</div>
           </div>
 
           <div class="form-grid-2">
@@ -582,10 +627,13 @@
         <!-- Botones de Utilidad Rápida de la Estaca -->
         <div style="display: flex; gap: 6px; justify-content: space-between; flex-wrap: wrap;">
           <button id="m-btn-offset" class="btn btn-warning" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;" title="Medir desfase desde esta estaca">
-            📐 Desfase / Pto Intermedio
+            📐 Desfase Cadenero
+          </button>
+          <button id="m-btn-reposition" class="btn btn-outline" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;" title="Ajustar coordenadas reales de esta estaca">
+            📍 Replantear Posición
           </button>
           <button id="m-btn-edit-design" class="btn btn-outline" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;">
-            ✏️ Modificar Rasante
+            ✏️ Rasante
           </button>
           <button id="m-btn-add-note" class="btn btn-outline" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;">
             📝 Nota
@@ -827,8 +875,135 @@
     </div>
 
     <!-- ============================================================
-         MODAL DE MODIFICACIÓN MANUAL DE COTA DE DISEÑO DE UN NODO
+         MODAL DE REPLANTEO / AJUSTE DE POSICIÓN DE ESTACA
+         (Desfase, Cinta a 2 Estacas o Arrastre)
          ============================================================ -->
+    <div id="modal-reposition-stake" class="modal-backdrop">
+      <div class="modal-sheet" style="max-width: 580px;">
+        
+        <div class="modal-header-row">
+          <div class="modal-stake-title" style="color: #b45309;">
+            <span>📍 Replanteo Estaca</span>
+            <span id="rep-stake-code" style="color: var(--primary-accent); font-family: var(--font-mono); font-size: 1.5rem;">A-1</span>
+          </div>
+          <button id="rep-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;">✕</button>
+        </div>
+
+        <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 8px;">
+          Posición actual: <strong id="rep-current-coords" style="font-family: var(--font-mono); color: var(--text-main);">X=0.00m, Y=0.00m</strong>
+        </div>
+
+        <!-- Pestañas de método de replanteo -->
+        <div class="sub-tabs-nav">
+          <button class="sub-tab-btn active" data-subtab="subtab-offset" type="button">
+            1. Desfase Vecina
+          </button>
+          <button class="sub-tab-btn" data-subtab="subtab-trilateration" type="button">
+            2. Cinta a 2 Estacas
+          </button>
+          <button class="sub-tab-btn" data-subtab="subtab-direct" type="button">
+            3. Coord Directas
+          </button>
+        </div>
+
+        <!-- SUBTAB 1: DESFASE DESDE VECINA -->
+        <div id="subtab-offset" class="sub-tab-pane active">
+          <div class="form-group" style="margin-bottom: 8px;">
+            <label class="form-label" for="rep-ref-stake" style="font-size: 0.82rem;">Estaca Vecina de Referencia:</label>
+            <select id="rep-ref-stake" class="form-select" style="min-height: 42px; font-weight: 800;">
+              <!-- Generado dinámicamente -->
+            </select>
+          </div>
+
+          <div class="form-grid-2" style="gap: 8px;">
+            <div>
+              <label class="form-label" for="rep-dx-input" style="font-size: 0.8rem;">Desfase Horizontal (dX en m):</label>
+              <input type="number" id="rep-dx-input" class="form-control" step="0.1" value="0.0" style="font-family: var(--font-mono); font-weight: 800;">
+              <small class="form-help">-X: Izq | +X: Der</small>
+            </div>
+            <div>
+              <label class="form-label" for="rep-dy-input" style="font-size: 0.8rem;">Desfase Vertical (dY en m):</label>
+              <input type="number" id="rep-dy-input" class="form-control" step="0.1" value="0.0" style="font-family: var(--font-mono); font-weight: 800;">
+              <small class="form-help">-Y: Atrás | +Y: Adelante</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: DISTANCIA CON CINTA A 2 ESTACAS (TRILATERACIÓN) -->
+        <div id="subtab-trilateration" class="sub-tab-pane">
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+            Mida con cinta desde 2 estacas conocidas para ubicar esta estaca sin necesidad de ángulo de 90°:
+          </p>
+          <div class="form-grid-2" style="gap: 8px; margin-bottom: 8px;">
+            <div>
+              <label class="form-label" for="rep-tri-stake1" style="font-size: 0.8rem;">Estaca 1:</label>
+              <select id="rep-tri-stake1" class="form-select" style="min-height: 38px; font-weight: 800;"></select>
+            </div>
+            <div>
+              <label class="form-label" for="rep-tri-dist1" style="font-size: 0.8rem;">Distancia 1 con cinta (m):</label>
+              <input type="number" id="rep-tri-dist1" class="form-control" step="0.05" placeholder="Ej. 10.25" style="min-height: 38px; font-family: var(--font-mono); font-weight: 800;">
+            </div>
+          </div>
+
+          <div class="form-grid-2" style="gap: 8px; margin-bottom: 8px;">
+            <div>
+              <label class="form-label" for="rep-tri-stake2" style="font-size: 0.8rem;">Estaca 2:</label>
+              <select id="rep-tri-stake2" class="form-select" style="min-height: 38px; font-weight: 800;"></select>
+            </div>
+            <div>
+              <label class="form-label" for="rep-tri-dist2" style="font-size: 0.8rem;">Distancia 2 con cinta (m):</label>
+              <input type="number" id="rep-tri-dist2" class="form-control" step="0.05" placeholder="Ej. 14.15" style="min-height: 38px; font-family: var(--font-mono); font-weight: 800;">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 8px;">
+            <label class="form-label" for="rep-tri-side" style="font-size: 0.8rem;">Lado respecto a la línea Estaca 1 ➔ Estaca 2:</label>
+            <select id="rep-tri-side" class="form-select" style="min-height: 38px; font-weight: 800;">
+              <option value="derecha" selected>Lado Derecho (Sentido horario)</option>
+              <option value="izquierda">Lado Izquierdo (Sentido anti-horario)</option>
+            </select>
+          </div>
+
+          <button id="rep-btn-calc-trilateration" class="btn btn-outline btn-block" style="min-height: 38px; font-size: 0.85rem;" type="button">
+            📐 Calcular Intersección con Cinta
+          </button>
+          <div id="rep-tri-status" style="font-size: 0.78rem; font-weight: 700; color: #16a34a; margin-top: 4px;"></div>
+        </div>
+
+        <!-- SUBTAB 3: COORDENADAS DIRECTAS (X, Y) -->
+        <div id="subtab-direct" class="sub-tab-pane">
+          <div class="form-grid-2" style="gap: 8px; margin-bottom: 8px;">
+            <div>
+              <label class="form-label" for="rep-direct-x" style="font-size: 0.8rem;">Coordenada X (m):</label>
+              <input type="number" id="rep-direct-x" class="form-control" step="0.1" style="font-family: var(--font-mono); font-weight: 800;">
+            </div>
+            <div>
+              <label class="form-label" for="rep-direct-y" style="font-size: 0.8rem;">Coordenada Y (m):</label>
+              <input type="number" id="rep-direct-y" class="form-control" step="0.1" style="font-family: var(--font-mono); font-weight: 800;">
+            </div>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">
+            Consejo: También puede arrastrar directamente la estaca con el dedo en el plano 2D al activar 'Modo Replanteo'.
+          </div>
+        </div>
+
+        <!-- Tarjeta de Resultado Calculado -->
+        <div class="card" style="margin-top: 10px; margin-bottom: 10px; padding: 10px; background-color: #f8fafc;">
+          <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted);">NUEVA POSICIÓN RESULTANTE:</div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
+            <span style="font-family: var(--font-mono); font-size: 1.25rem; font-weight: 900;" id="rep-result-coords">X=0.00m, Y=0.00m</span>
+            <span style="font-size: 0.85rem; font-weight: 800; color: var(--primary-accent);">
+              Nueva Rasante: <strong id="rep-result-design" style="font-family: var(--font-mono);">100.000 m</strong>
+            </span>
+          </div>
+        </div>
+
+        <button id="rep-btn-apply" class="btn btn-success btn-block" style="min-height: 48px; font-size: 1.05rem;" type="button">
+          ✔ Guardar Nueva Ubicación de Estaca
+        </button>
+
+      </div>
+    </div>
     <div id="modal-edit-design" class="modal-backdrop">
       <div class="modal-sheet" style="max-width: 450px;">
         <div class="modal-header-row">

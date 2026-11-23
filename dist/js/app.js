@@ -16,7 +16,22 @@
     currentStakeIndex: 0,
     modalReadingBuffer: '',
     drainageWarnings: [],
-    earthworkSummary: null
+    earthworkSummary: null,
+    activeViewMode: '2d', // '2d' | 'table'
+    isEditMode: false,
+    canvas: {
+      panX: 60,
+      panY: 60,
+      zoom: 1.0,
+      isPanning: false,
+      isDraggingStake: false,
+      startX: 0,
+      startY: 0,
+      draggedStake: null,
+      hoveredStake: null,
+      tinData: null
+    },
+    repositionStake: null
   };
 
   // --- ELEMENTOS DEL DOM ---
@@ -33,19 +48,35 @@
     dom.tabBtns = document.querySelectorAll('.tab-btn');
     dom.tabPanes = document.querySelectorAll('.tab-pane');
 
-    // Tab Cuadrícula
+    // Tab Cuadrícula / Plano 2D
     dom.lakeGridTable = document.getElementById('lake-grid-table');
+    dom.lakeGridContainer = document.getElementById('lake-grid-container');
     dom.gridProgressText = document.getElementById('grid-progress-text');
     dom.gridTolText = document.getElementById('grid-tol-text');
     dom.puddleGlobalAlert = document.getElementById('puddle-global-alert');
     dom.puddleAlertDesc = document.getElementById('puddle-alert-desc');
     dom.btnQuickPC = document.getElementById('btn-quick-pc');
     dom.btnQuickOffset = document.getElementById('btn-quick-offset');
+    dom.btnToggleEditMode = document.getElementById('btn-toggle-edit-mode');
+
+    // Vistas 2D vs Tabla
+    dom.viewMode2D = document.getElementById('view-mode-2d');
+    dom.viewModeTable = document.getElementById('view-mode-table');
+    dom.canvas2DWrapper = document.getElementById('canvas-2d-wrapper');
+    dom.lakeTinCanvas = document.getElementById('lake-tin-canvas');
+    dom.canvasEditBanner = document.getElementById('canvas-edit-banner');
+    dom.canvasBtnZoomIn = document.getElementById('canvas-btn-zoom-in');
+    dom.canvasBtnZoomOut = document.getElementById('canvas-btn-zoom-out');
+    dom.canvasBtnCenter = document.getElementById('canvas-btn-center');
+    dom.chkShowTin = document.getElementById('chk-show-tin');
+    dom.chkShowDistances = document.getElementById('chk-show-distances');
+    dom.chkShowFlow = document.getElementById('chk-show-flow');
 
     // Tab Configuración
     dom.cfgPondName = document.getElementById('cfg-pond-name');
     dom.cfgRows = document.getElementById('cfg-rows');
     dom.cfgCols = document.getElementById('cfg-cols');
+    dom.cfgRowPattern = document.getElementById('cfg-row-pattern');
     dom.cfgDx = document.getElementById('cfg-dx');
     dom.cfgDy = document.getElementById('cfg-dy');
     dom.cfgBoxRow = document.getElementById('cfg-box-row');
@@ -105,6 +136,7 @@
     dom.mPuddleNote = document.getElementById('m-puddle-note');
     dom.mPuddleDesc = document.getElementById('m-puddle-desc');
     dom.mBtnOffset = document.getElementById('m-btn-offset');
+    dom.mBtnReposition = document.getElementById('m-btn-reposition');
     dom.mBtnEditDesign = document.getElementById('m-btn-edit-design');
     dom.mBtnAddNote = document.getElementById('m-btn-add-note');
     dom.virtualKeypad = document.querySelector('.virtual-keypad');
@@ -127,6 +159,29 @@
     dom.offPointTag = document.getElementById('off-point-tag');
     dom.offBtnSavePoint = document.getElementById('off-btn-save-point');
     dom.offsetStepBtns = document.querySelectorAll('.offset-step-btn');
+
+    // Modal Replanteo / Ajuste de Estaca
+    dom.modalRepositionStake = document.getElementById('modal-reposition-stake');
+    dom.repStakeCode = document.getElementById('rep-stake-code');
+    dom.repCurrentCoords = document.getElementById('rep-current-coords');
+    dom.repBtnClose = document.getElementById('rep-btn-close');
+    dom.repSubTabBtns = document.querySelectorAll('.sub-tab-btn');
+    dom.repSubTabPanes = document.querySelectorAll('.sub-tab-pane');
+    dom.repRefStake = document.getElementById('rep-ref-stake');
+    dom.repDxInput = document.getElementById('rep-dx-input');
+    dom.repDyInput = document.getElementById('rep-dy-input');
+    dom.repTriStake1 = document.getElementById('rep-tri-stake1');
+    dom.repTriDist1 = document.getElementById('rep-tri-dist1');
+    dom.repTriStake2 = document.getElementById('rep-tri-stake2');
+    dom.repTriDist2 = document.getElementById('rep-tri-dist2');
+    dom.repTriSide = document.getElementById('rep-tri-side');
+    dom.repBtnCalcTrilateration = document.getElementById('rep-btn-calc-trilateration');
+    dom.repTriStatus = document.getElementById('rep-tri-status');
+    dom.repDirectX = document.getElementById('rep-direct-x');
+    dom.repDirectY = document.getElementById('rep-direct-y');
+    dom.repResultCoords = document.getElementById('rep-result-coords');
+    dom.repResultDesign = document.getElementById('rep-result-design');
+    dom.repBtnApply = document.getElementById('rep-btn-apply');
 
     // Modal Punto de Cambio (PC)
     dom.modalPCAssistant = document.getElementById('modal-pc-assistant');
@@ -312,7 +367,7 @@
     }
   }
 
-  // --- 2. PESTAÑA CUADRÍCULA VISUAL ---
+  // --- 2. PESTAÑA CUADRÍCULA VISUAL Y PLANO 2D ---
   function renderGridTab() {
     if (!state.project || !state.stakes) return;
 
@@ -336,6 +391,20 @@
     const pct = totalCount > 0 ? Math.round((measuredCount / totalCount) * 100) : 0;
     dom.gridProgressText.textContent = `Medidas: ${measuredCount} / ${totalCount} (${pct}%)`;
     dom.gridTolText.textContent = `Tolerancia 'A Nivel': ±${(tolMeters * 100).toFixed(0)} cm`;
+
+    // Conmutar entre vista de Plano 2D y Tabla tradicional
+    if (state.activeViewMode === '2d') {
+      dom.canvas2DWrapper.style.display = 'block';
+      dom.lakeGridContainer.style.display = 'none';
+      dom.viewMode2D.classList.add('active');
+      dom.viewModeTable.classList.remove('active');
+      renderCanvas2D();
+    } else {
+      dom.canvas2DWrapper.style.display = 'none';
+      dom.lakeGridContainer.style.display = 'block';
+      dom.viewMode2D.classList.remove('active');
+      dom.viewModeTable.classList.add('active');
+    }
 
     // Renderizar tabla HTML de la cuadrícula
     let html = '';
@@ -405,6 +474,256 @@
         const c = parseInt(cell.getAttribute('data-col'), 10);
         openStakeModalByCoord(r, c);
       });
+    });
+  }
+
+  // --- MOTOR GRÁFICO DEL PLANO 2D ESCALA REAL (TIN / DELAUNAY) ---
+  function renderCanvas2D() {
+    const canvas = dom.lakeTinCanvas;
+    if (!canvas || state.stakes.length === 0) return;
+
+    // Ajustar resolución interna al tamaño CSS
+    const rect = canvas.getBoundingClientRect();
+    if (canvas.width !== rect.width * (window.devicePixelRatio || 1) || canvas.height !== rect.height * (window.devicePixelRatio || 1)) {
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+    }
+
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const isDark = document.body.classList.contains('dark-mode');
+
+    // Calcular límites espaciales (Bounding Box)
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    state.stakes.forEach(s => {
+      if (s.x < minX) minX = s.x;
+      if (s.x > maxX) maxX = s.x;
+      if (s.y < minY) minY = s.y;
+      if (s.y > maxY) maxY = s.y;
+    });
+
+    const spanX = Math.max(10, maxX - minX);
+    const spanY = Math.max(10, maxY - minY);
+
+    // Factor de escala base para que quepa cómodamente en el lienzo
+    const padding = 50 * (window.devicePixelRatio || 1);
+    const availW = w - padding * 2;
+    const availH = h - padding * 2;
+    const scale = Math.min(availW / spanX, availH / spanY) * state.canvas.zoom;
+
+    const toPxX = (x) => padding + state.canvas.panX + (x - minX) * scale;
+    const toPxY = (y) => padding + state.canvas.panY + (y - minY) * scale;
+
+    // 1. Dibujar Malla de Fondo Sutil
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+    ctx.lineWidth = 1;
+    const gridStep = state.project.settings.dx || 10;
+    for (let gx = Math.floor(minX / gridStep) * gridStep; gx <= maxX + gridStep; gx += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(toPxX(gx), 0);
+      ctx.lineTo(toPxX(gx), h);
+      ctx.stroke();
+    }
+    for (let gy = Math.floor(minY / gridStep) * gridStep; gy <= maxY + gridStep; gy += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(0, toPxY(gy));
+      ctx.lineTo(w, toPxY(gy));
+      ctx.stroke();
+    }
+
+    // 2. Calcular y Dibujar Red de Triángulos TIN (Delaunay) y Aristas con Distancias
+    const tin = window.TopoMath.computeDelaunayTIN(state.stakes);
+    state.canvas.tinData = tin;
+
+    const showTin = dom.chkShowTin ? dom.chkShowTin.checked : true;
+    const showDist = dom.chkShowDistances ? dom.chkShowDistances.checked : true;
+    const showFlow = dom.chkShowFlow ? dom.chkShowFlow.checked : true;
+
+    // Dibujar aristas TIN
+    if (showTin) {
+      ctx.strokeStyle = isDark ? 'rgba(56, 189, 248, 0.4)' : 'rgba(2, 132, 199, 0.35)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+
+      tin.edges.forEach(edge => {
+        const p1 = state.stakes[edge.from];
+        const p2 = state.stakes[edge.to];
+        if (!p1 || !p2) return;
+
+        const x1 = toPxX(p1.x), y1 = toPxY(p1.y);
+        const x2 = toPxX(p2.x), y2 = toPxY(p2.y);
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+    }
+
+    // Dibujar etiquetas de distancia real en metros sobre las aristas
+    if (showDist) {
+      ctx.font = `bold ${Math.max(10, 11 * (window.devicePixelRatio || 1))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      tin.edges.forEach(edge => {
+        const p1 = state.stakes[edge.from];
+        const p2 = state.stakes[edge.to];
+        if (!p1 || !p2) return;
+
+        const x1 = toPxX(p1.x), y1 = toPxY(p1.y);
+        const x2 = toPxX(p2.x), y2 = toPxY(p2.y);
+        const midX = (x1 + x2) / 2;
+        const midY = (y1 + y2) / 2;
+
+        const label = `${edge.length.toFixed(1)}m`;
+        const textWidth = ctx.measureText(label).width + 8;
+        const textHeight = 16 * (window.devicePixelRatio || 1);
+
+        // Fondo de pastilla para legibilidad de distancia
+        ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)';
+        ctx.strokeStyle = isDark ? '#475569' : '#cbd5e1';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(midX - textWidth / 2, midY - textHeight / 2, textWidth, textHeight, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = isDark ? '#93c5fd' : '#0369a1';
+        ctx.fillText(label, midX, midY);
+      });
+    }
+
+    // 3. Dibujar Flechas de Flujo de Drenaje hacia la Caja de Pesca
+    const boxRow = state.project.settings.boxRow ?? 0;
+    const boxCol = state.project.settings.boxCol ?? 0;
+    const boxStake = state.stakes.find(s => s.row === boxRow && s.col === boxCol) || state.stakes[0];
+
+    if (showFlow && boxStake) {
+      const bx = toPxX(boxStake.x);
+      const by = toPxY(boxStake.y);
+
+      state.stakes.forEach(s => {
+        if (s.id === boxStake.id) return;
+        const sx = toPxX(s.x);
+        const sy = toPxY(s.y);
+
+        const angle = Math.atan2(by - sy, bx - sx);
+        const len = 16 * (window.devicePixelRatio || 1);
+        const ax = sx + Math.cos(angle) * len;
+        const ay = sy + Math.sin(angle) * len;
+
+        ctx.strokeStyle = 'rgba(2, 132, 199, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ax, ay);
+        ctx.stroke();
+
+        // Punta de flecha
+        ctx.fillStyle = '#0284c7';
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - 5 * Math.cos(angle - Math.PI / 6), ay - 5 * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(ax - 5 * Math.cos(angle + Math.PI / 6), ay - 5 * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+      });
+    }
+
+    // 4. Dibujar Nodos de Estacas
+    const nodeRadius = 14 * (window.devicePixelRatio || 1);
+    const tolMeters = (state.project.settings.toleranceCm || 2.0) / 100;
+
+    state.stakes.forEach((stake) => {
+      const px = toPxX(stake.x);
+      const py = toPxY(stake.y);
+      const isCaja = (boxStake && stake.id === boxStake.id);
+      const isHovered = (state.canvas.hoveredStake && state.canvas.hoveredStake.id === stake.id);
+
+      // Color según estado de corte/relleno
+      let fillColor = '#ffffff';
+      let strokeColor = '#000000';
+      let textColor = '#000000';
+
+      if (isCaja) {
+        fillColor = '#f59e0b';
+        strokeColor = '#b45309';
+        textColor = '#78350f';
+      } else if (stake.reading === null || stake.reading === undefined) {
+        fillColor = isDark ? '#1e293b' : '#ffffff';
+        strokeColor = isDark ? '#94a3b8' : '#334155';
+        textColor = isDark ? '#f8fafc' : '#000000';
+      } else {
+        const evalRes = window.TopoMath.evaluateStatus(stake.cutFill, tolMeters);
+        if (evalRes.status === 'A_NIVEL') {
+          fillColor = '#16a34a';
+          strokeColor = '#14532d';
+          textColor = '#ffffff';
+        } else if (evalRes.status === 'CORTE') {
+          fillColor = '#dc2626';
+          strokeColor = '#7f1d1d';
+          textColor = '#ffffff';
+        } else {
+          fillColor = '#0284c7';
+          strokeColor = '#075985';
+          textColor = '#ffffff';
+        }
+      }
+
+      // Anillo de modo replanteo
+      if (state.isEditMode) {
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.arc(px, py, nodeRadius + 5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Círculo del nodo
+      ctx.fillStyle = fillColor;
+      ctx.strokeStyle = isHovered ? '#00ff88' : strokeColor;
+      ctx.lineWidth = isHovered ? 4 : 2.5;
+
+      ctx.beginPath();
+      ctx.arc(px, py, nodeRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Alerta de empozamiento / charco
+      if (stake.hasPuddleWarning) {
+        ctx.fillStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.arc(px + nodeRadius * 0.7, py - nodeRadius * 0.7, 7 * (window.devicePixelRatio || 1), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${9 * (window.devicePixelRatio || 1)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('!', px + nodeRadius * 0.7, py - nodeRadius * 0.7 + 3);
+      }
+
+      // Texto de Código de Estaca
+      ctx.fillStyle = textColor;
+      ctx.font = `bold ${Math.max(10, 11 * (window.devicePixelRatio || 1))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(stake.code, px, py);
+
+      // Cota Rasante o Desbalance debajo de la estaca
+      let subLabel = `${stake.designElevation.toFixed(2)}`;
+      if (stake.cutFill !== null && stake.cutFill !== undefined) {
+        subLabel = `${stake.cutFill > 0 ? '+' : ''}${stake.cutFill.toFixed(2)}m`;
+      }
+
+      ctx.font = `bold ${Math.max(9, 10 * (window.devicePixelRatio || 1))}px monospace`;
+      ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
+      ctx.fillText(subLabel, px, py + nodeRadius + 12);
     });
   }
 
@@ -607,6 +926,7 @@
     dom.cfgPondName.value = state.project.name || '';
     dom.cfgRows.value = s.rows;
     dom.cfgCols.value = s.cols;
+    dom.cfgRowPattern.value = s.rowPattern || '';
     dom.cfgDx.value = s.dx;
     dom.cfgDy.value = s.dy;
     dom.cfgBoxElev.value = s.boxElevation.toFixed(3);
@@ -654,6 +974,7 @@
     const newName = dom.cfgPondName.value.trim() || 'Lago Piscícola';
     const newRows = parseInt(dom.cfgRows.value, 10);
     const newCols = parseInt(dom.cfgCols.value, 10);
+    const newRowPattern = dom.cfgRowPattern.value.trim();
     const newDx = parseFloat(dom.cfgDx.value);
     const newDy = parseFloat(dom.cfgDy.value);
     const newBoxRow = parseInt(dom.cfgBoxRow.value, 10);
@@ -673,6 +994,7 @@
     const s = state.project.settings;
     s.rows = newRows;
     s.cols = newCols;
+    s.rowPattern = newRowPattern;
     s.dx = newDx;
     s.dy = newDy;
     s.boxRow = newBoxRow;
@@ -685,62 +1007,102 @@
     s.toleranceCm = newTolerance;
     state.project.name = newName;
 
-    // Reconstruir o actualizar malla de estacas
+    // Reconstruir o actualizar malla de estacas (regular o con patrón)
     const existingStakesMap = new Map();
-    state.stakes.forEach(st => existingStakesMap.set(`${st.row}_${st.col}`, st));
+    state.stakes.forEach(st => {
+      existingStakesMap.set(st.code, st);
+      existingStakesMap.set(`${st.row}_${st.col}`, st);
+    });
 
-    const updatedStakes = [];
-    for (let r = 0; r < newRows; r++) {
-      for (let c = 0; c < newCols; c++) {
-        const key = `${r}_${c}`;
-        const existing = existingStakesMap.get(key);
-        const code = window.TopoMath.getStakeCode(r, c);
-        const coords = window.TopoMath.getCoordinates(r, c, newDx, newDy);
+    let rawStakes;
+    if (newRowPattern) {
+      rawStakes = window.TopoMath.generateStakes(state.project.id, s);
+    } else {
+      rawStakes = [];
+      for (let r = 0; r < newRows; r++) {
+        for (let c = 0; c < newCols; c++) {
+          const code = window.TopoMath.getStakeCode(r, c);
+          const x = c * newDx;
+          const y = r * newDy;
+          rawStakes.push({
+            id: `${state.project.id}_${r}_${c}`,
+            projId: state.project.id,
+            row: r,
+            col: c,
+            code: code,
+            x: x,
+            y: y,
+            designElevation: 0,
+            isCustomDesign: false,
+            reading: null,
+            measuredElevation: null,
+            stationId: null,
+            measuredAt: null,
+            cutFill: null,
+            status: 'PENDIENTE',
+            hasPuddleWarning: false,
+            puddleReason: null,
+            note: ''
+          });
+        }
+      }
+    }
 
-        let designElev;
-        let isCustom = false;
+    const updatedStakes = rawStakes.map(st => {
+      const existing = existingStakesMap.get(st.code) || existingStakesMap.get(`${st.row}_${st.col}`);
+      let designElev;
+      let isCustom = false;
+      let realX = st.x;
+      let realY = st.y;
 
-        if (existing && existing.isCustomDesign) {
+      if (existing) {
+        realX = existing.x ?? st.x;
+        realY = existing.y ?? st.y;
+        if (existing.isCustomDesign) {
           designElev = existing.designElevation;
           isCustom = true;
         } else {
-          designElev = window.TopoMath.calculateDesignElevation(r, c, s);
+          const res = window.TopoMath.calculateDesignElevationAtCoord(realX, realY, s, []);
+          designElev = res.elevation;
         }
-
-        let reading = existing ? existing.reading : null;
-        let groundElev = existing ? existing.measuredElevation : null;
-        let stationId = existing ? existing.stationId : null;
-        let cutFill = null;
-        let status = 'PENDIENTE';
-
-        if (groundElev !== null && groundElev !== undefined) {
-          cutFill = window.TopoMath.calculateCutFill(groundElev, designElev);
-          const tolM = newTolerance / 100;
-          status = window.TopoMath.evaluateStatus(cutFill, tolM).status;
-        }
-
-        updatedStakes.push({
-          id: `${state.project.id}_${r}_${c}`,
-          projId: state.project.id,
-          row: r,
-          col: c,
-          code: code,
-          x: coords.x,
-          y: coords.y,
-          designElevation: designElev,
-          isCustomDesign: isCustom,
-          reading: reading,
-          measuredElevation: groundElev,
-          stationId: stationId,
-          measuredAt: existing ? existing.measuredAt : null,
-          cutFill: cutFill,
-          status: status,
-          hasPuddleWarning: false,
-          puddleReason: null,
-          note: existing ? existing.note : ''
-        });
+      } else {
+        const res = window.TopoMath.calculateDesignElevationAtCoord(realX, realY, s, []);
+        designElev = res.elevation;
       }
-    }
+
+      let reading = existing ? existing.reading : null;
+      let groundElev = existing ? existing.measuredElevation : null;
+      let stationId = existing ? existing.stationId : null;
+      let cutFill = null;
+      let status = 'PENDIENTE';
+
+      if (groundElev !== null && groundElev !== undefined) {
+        cutFill = window.TopoMath.calculateCutFill(groundElev, designElev);
+        const tolM = newTolerance / 100;
+        status = window.TopoMath.evaluateStatus(cutFill, tolM).status;
+      }
+
+      return {
+        id: st.id,
+        projId: state.project.id,
+        row: st.row,
+        col: st.col,
+        code: st.code,
+        x: realX,
+        y: realY,
+        designElevation: designElev,
+        isCustomDesign: isCustom,
+        reading: reading,
+        measuredElevation: groundElev,
+        stationId: stationId,
+        measuredAt: existing ? existing.measuredAt : null,
+        cutFill: cutFill,
+        status: status,
+        hasPuddleWarning: false,
+        puddleReason: null,
+        note: existing ? existing.note : ''
+      };
+    });
 
     await window.topoDB.clearStakesForProject(state.project.id);
     await window.topoDB.saveStakesBulk(updatedStakes);
@@ -1259,6 +1621,38 @@
     // Quick PC button
     dom.btnQuickPC.addEventListener('click', openPCAssistant);
     dom.btnQuickOffset.addEventListener('click', () => openOffsetModal());
+    dom.btnToggleEditMode.addEventListener('click', toggleEditMode);
+
+    // Conmutadores de vista 2D vs Tabla
+    dom.viewMode2D.addEventListener('click', () => {
+      state.activeViewMode = '2d';
+      renderGridTab();
+    });
+    dom.viewModeTable.addEventListener('click', () => {
+      state.activeViewMode = 'table';
+      renderGridTab();
+    });
+
+    // Capas del lienzo
+    dom.chkShowTin.addEventListener('change', renderCanvas2D);
+    dom.chkShowDistances.addEventListener('change', renderCanvas2D);
+    dom.chkShowFlow.addEventListener('change', renderCanvas2D);
+
+    // Controles de zoom del lienzo
+    dom.canvasBtnZoomIn.addEventListener('click', () => {
+      state.canvas.zoom = Math.min(4.0, state.canvas.zoom * 1.25);
+      renderCanvas2D();
+    });
+    dom.canvasBtnZoomOut.addEventListener('click', () => {
+      state.canvas.zoom = Math.max(0.3, state.canvas.zoom / 1.25);
+      renderCanvas2D();
+    });
+    dom.canvasBtnCenter.addEventListener('click', () => {
+      state.canvas.zoom = 1.0;
+      state.canvas.panX = 0;
+      state.canvas.panY = 0;
+      renderCanvas2D();
+    });
 
     // Modal Lectura
     dom.mBtnClose.addEventListener('click', closeStakeModal);
@@ -1266,6 +1660,11 @@
       const stake = state.stakes[state.currentStakeIndex];
       closeStakeModal();
       openOffsetModal(stake);
+    });
+    dom.mBtnReposition.addEventListener('click', () => {
+      const stake = state.stakes[state.currentStakeIndex];
+      closeStakeModal();
+      openRepositionModal(stake);
     });
     dom.mBtnPrev.addEventListener('click', () => {
       if (state.currentStakeIndex > 0) {
@@ -1370,6 +1769,25 @@
         updateOffsetCalculations();
       });
     });
+
+    // Modal Replanteo / Ajuste de Estaca
+    dom.repBtnClose.addEventListener('click', closeRepositionModal);
+    dom.repSubTabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const subtabId = btn.getAttribute('data-subtab');
+        switchSubTab(subtabId);
+      });
+    });
+    dom.repRefStake.addEventListener('change', updateRepositionPreview);
+    dom.repDxInput.addEventListener('input', updateRepositionPreview);
+    dom.repDyInput.addEventListener('input', updateRepositionPreview);
+    dom.repDirectX.addEventListener('input', updateRepositionPreview);
+    dom.repDirectY.addEventListener('input', updateRepositionPreview);
+    dom.repBtnCalcTrilateration.addEventListener('click', calcTrilateration);
+    dom.repBtnApply.addEventListener('click', applyRepositionStake);
+
+    // Inicializar eventos táctiles e interactivos del lienzo 2D
+    initCanvasEvents();
   }
 
   // --- 9. MODAL DE PUNTO INTERMEDIO / DESFASE DESDE ESTACA ---
@@ -1649,6 +2067,347 @@
     closeOffsetModal();
 
     alert(`✔ Punto intermedio guardado en Cartera Topográfica:\n${tag}\nCota Rasante: ${designZ.toFixed(3)} m | Lectura Ideal: ${window.TopoMath.calculateIdealReading(hi, designZ).toFixed(3)} m`);
+  }
+
+  // --- 10. REPLANTEO DE ESTACA Y CONTROL DEL PLANO 2D (TIN) ---
+  function toggleEditMode() {
+    state.isEditMode = !state.isEditMode;
+    dom.btnToggleEditMode.textContent = state.isEditMode ? '🛠️ Modo Replanteo: ON' : '🛠️ Modo Replanteo: OFF';
+    dom.btnToggleEditMode.className = state.isEditMode ? 'btn btn-warning' : 'btn btn-outline';
+    dom.canvasEditBanner.style.display = state.isEditMode ? 'flex' : 'none';
+    renderCanvas2D();
+  }
+
+  function initCanvasEvents() {
+    const canvas = dom.lakeTinCanvas;
+    if (!canvas) return;
+
+    const getCanvasPos = (clientX, clientY) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (clientX - rect.left) * (canvas.width / rect.width);
+      const y = (clientY - rect.top) * (canvas.height / rect.height);
+      return { x, y };
+    };
+
+    const getPondCoords = (px, py) => {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      state.stakes.forEach(s => {
+        if (s.x < minX) minX = s.x;
+        if (s.x > maxX) maxX = s.x;
+        if (s.y < minY) minY = s.y;
+        if (s.y > maxY) maxY = s.y;
+      });
+      const spanX = Math.max(10, maxX - minX);
+      const spanY = Math.max(10, maxY - minY);
+      const padding = 50 * (window.devicePixelRatio || 1);
+      const availW = canvas.width - padding * 2;
+      const availH = canvas.height - padding * 2;
+      const scale = Math.min(availW / spanX, availH / spanY) * state.canvas.zoom;
+
+      const pondX = minX + (px - padding - state.canvas.panX) / scale;
+      const pondY = minY + (py - padding - state.canvas.panY) / scale;
+      return { x: pondX, y: pondY };
+    };
+
+    const findStakeAtPos = (px, py) => {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      state.stakes.forEach(s => {
+        if (s.x < minX) minX = s.x;
+        if (s.x > maxX) maxX = s.x;
+        if (s.y < minY) minY = s.y;
+        if (s.y > maxY) maxY = s.y;
+      });
+      const spanX = Math.max(10, maxX - minX);
+      const spanY = Math.max(10, maxY - minY);
+      const padding = 50 * (window.devicePixelRatio || 1);
+      const availW = canvas.width - padding * 2;
+      const availH = canvas.height - padding * 2;
+      const scale = Math.min(availW / spanX, availH / spanY) * state.canvas.zoom;
+
+      const hitRadius = 24 * (window.devicePixelRatio || 1);
+
+      for (const stake of state.stakes) {
+        const sx = padding + state.canvas.panX + (stake.x - minX) * scale;
+        const sy = padding + state.canvas.panY + (stake.y - minY) * scale;
+        if (Math.hypot(px - sx, py - sy) <= hitRadius) {
+          return stake;
+        }
+      }
+      return null;
+    };
+
+    // Pointer Down
+    const onPointerDown = (clientX, clientY) => {
+      const pos = getCanvasPos(clientX, clientY);
+      state.canvas.startX = clientX;
+      state.canvas.startY = clientY;
+
+      const clickedStake = findStakeAtPos(pos.x, pos.y);
+
+      if (state.isEditMode && clickedStake) {
+        state.canvas.isDraggingStake = true;
+        state.canvas.draggedStake = clickedStake;
+      } else {
+        state.canvas.isPanning = true;
+        state.canvas.hoveredStake = clickedStake;
+      }
+    };
+
+    // Pointer Move
+    const onPointerMove = (clientX, clientY) => {
+      if (state.canvas.isDraggingStake && state.canvas.draggedStake) {
+        const pos = getCanvasPos(clientX, clientY);
+        const pondPos = getPondCoords(pos.x, pos.y);
+        state.canvas.draggedStake.x = Math.round(pondPos.x * 10) / 10;
+        state.canvas.draggedStake.y = Math.round(pondPos.y * 10) / 10;
+
+        if (!state.canvas.draggedStake.isCustomDesign) {
+          const res = window.TopoMath.calculateDesignElevationAtCoord(state.canvas.draggedStake.x, state.canvas.draggedStake.y, state.project.settings, []);
+          state.canvas.draggedStake.designElevation = res.elevation;
+        }
+        renderCanvas2D();
+      } else if (state.canvas.isPanning) {
+        const dx = (clientX - state.canvas.startX) * (window.devicePixelRatio || 1);
+        const dy = (clientY - state.canvas.startY) * (window.devicePixelRatio || 1);
+        state.canvas.panX += dx;
+        state.canvas.panY += dy;
+        state.canvas.startX = clientX;
+        state.canvas.startY = clientY;
+        renderCanvas2D();
+      }
+    };
+
+    // Pointer Up
+    const onPointerUp = (clientX, clientY) => {
+      const dist = Math.hypot(clientX - state.canvas.startX, clientY - state.canvas.startY);
+
+      if (state.canvas.isDraggingStake && state.canvas.draggedStake) {
+        window.topoDB.saveStake(state.canvas.draggedStake);
+        updateCalculations();
+        state.canvas.isDraggingStake = false;
+        state.canvas.draggedStake = null;
+        renderCanvas2D();
+      } else if (dist < 6) {
+        const pos = getCanvasPos(clientX, clientY);
+        const clickedStake = findStakeAtPos(pos.x, pos.y);
+
+        if (clickedStake) {
+          if (state.isEditMode) {
+            openRepositionModal(clickedStake);
+          } else {
+            const idx = state.stakes.findIndex(s => s.id === clickedStake.id);
+            if (idx !== -1) {
+              state.currentStakeIndex = idx;
+              openStakeModal();
+            }
+          }
+        } else {
+          // Si hace clic en un espacio vacío en modo normal, sugerir medir punto intermedio ahí
+          const pondPos = getPondCoords(pos.x, pos.y);
+          if (pondPos.x >= 0 && pondPos.y >= 0) {
+            // Encontrar estaca más cercana
+            let closest = state.stakes[0];
+            let minDist = Infinity;
+            state.stakes.forEach(st => {
+              const d = Math.hypot(st.x - pondPos.x, st.y - pondPos.y);
+              if (d < minDist) {
+                minDist = d;
+                closest = st;
+              }
+            });
+            if (closest) {
+              openOffsetModal(closest);
+              dom.offDxInput.value = (pondPos.x - closest.x).toFixed(1);
+              dom.offDyInput.value = (pondPos.y - closest.y).toFixed(1);
+              updateOffsetCalculations();
+            }
+          }
+        }
+      }
+      state.canvas.isPanning = false;
+    };
+
+    canvas.addEventListener('mousedown', (e) => onPointerDown(e.clientX, e.clientY));
+    window.addEventListener('mousemove', (e) => {
+      if (state.canvas.isPanning || state.canvas.isDraggingStake) {
+        onPointerMove(e.clientX, e.clientY);
+      }
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (state.canvas.isPanning || state.canvas.isDraggingStake) {
+        onPointerUp(e.clientX, e.clientY);
+      }
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        onPointerDown(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1) {
+        onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (e.changedTouches.length === 1) {
+        onPointerUp(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+      state.canvas.zoom = Math.max(0.3, Math.min(4.0, state.canvas.zoom * zoomFactor));
+      renderCanvas2D();
+    }, { passive: false });
+  }
+
+  // --- 11. MODAL DE REPLANTEO DE ESTACA ---
+  let activeRepositionSubTab = 'subtab-offset';
+
+  function openRepositionModal(stake) {
+    state.repositionStake = stake;
+    dom.repStakeCode.textContent = stake.code;
+    dom.repCurrentCoords.textContent = `X = ${stake.x.toFixed(2)} m, Y = ${stake.y.toFixed(2)} m`;
+
+    let otherOpts = '';
+    state.stakes.forEach(s => {
+      if (s.id !== stake.id) {
+        otherOpts += `<option value="${s.id}">${s.code} (X=${s.x.toFixed(1)}m, Y=${s.y.toFixed(1)}m)</option>`;
+      }
+    });
+    dom.repRefStake.innerHTML = otherOpts;
+    dom.repTriStake1.innerHTML = otherOpts;
+    dom.repTriStake2.innerHTML = otherOpts;
+
+    if (dom.repTriStake2.options.length > 1) {
+      dom.repTriStake2.selectedIndex = 1;
+    }
+
+    dom.repDxInput.value = '0.0';
+    dom.repDyInput.value = '0.0';
+    dom.repDirectX.value = stake.x.toFixed(2);
+    dom.repDirectY.value = stake.y.toFixed(2);
+
+    dom.repTriDist1.value = '';
+    dom.repTriDist2.value = '';
+    dom.repTriStatus.textContent = '';
+
+    switchSubTab('subtab-offset');
+    updateRepositionPreview();
+    dom.modalRepositionStake.classList.add('open');
+  }
+
+  function closeRepositionModal() {
+    dom.modalRepositionStake.classList.remove('open');
+  }
+
+  function switchSubTab(subtabId) {
+    activeRepositionSubTab = subtabId;
+    dom.repSubTabBtns.forEach(btn => {
+      if (btn.getAttribute('data-subtab') === subtabId) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+    dom.repSubTabPanes.forEach(pane => {
+      if (pane.id === subtabId) pane.classList.add('active');
+      else pane.classList.remove('active');
+    });
+    updateRepositionPreview();
+  }
+
+  function updateRepositionPreview() {
+    if (!state.repositionStake) return;
+    let targetX = state.repositionStake.x;
+    let targetY = state.repositionStake.y;
+
+    if (activeRepositionSubTab === 'subtab-offset') {
+      const refStakeId = dom.repRefStake.value;
+      const refStake = state.stakes.find(s => s.id === refStakeId) || state.repositionStake;
+      const dX = parseFloat(dom.repDxInput.value) || 0;
+      const dY = parseFloat(dom.repDyInput.value) || 0;
+      targetX = refStake.x + dX;
+      targetY = refStake.y + dY;
+    } else if (activeRepositionSubTab === 'subtab-direct') {
+      targetX = parseFloat(dom.repDirectX.value) || 0;
+      targetY = parseFloat(dom.repDirectY.value) || 0;
+    }
+
+    state.repositionNewCoords = { x: targetX, y: targetY };
+    dom.repResultCoords.textContent = `X=${targetX.toFixed(2)} m, Y=${targetY.toFixed(2)} m`;
+
+    const calcRes = window.TopoMath.calculateDesignElevationAtCoord(targetX, targetY, state.project.settings, []);
+    dom.repResultDesign.textContent = `${calcRes.elevation.toFixed(3)} m`;
+  }
+
+  function calcTrilateration() {
+    const s1Id = dom.repTriStake1.value;
+    const s2Id = dom.repTriStake2.value;
+    const d1 = parseFloat(dom.repTriDist1.value);
+    const d2 = parseFloat(dom.repTriDist2.value);
+    const side = dom.repTriSide.value;
+
+    if (s1Id === s2Id) {
+      alert('Elija dos estacas distintas para triangular.');
+      return;
+    }
+    if (isNaN(d1) || isNaN(d2) || d1 <= 0 || d2 <= 0) {
+      alert('Ingrese las distancias medidas con cinta (en metros) mayores a 0.');
+      return;
+    }
+
+    const p1 = state.stakes.find(s => s.id === s1Id);
+    const p2 = state.stakes.find(s => s.id === s2Id);
+    if (!p1 || !p2) return;
+
+    const sol = window.TopoMath.solveTrilateration(p1, d1, p2, d2, side);
+    if (!sol.success) {
+      dom.repTriStatus.style.color = '#dc2626';
+      dom.repTriStatus.textContent = `❌ ${sol.error}`;
+      return;
+    }
+
+    dom.repTriStatus.style.color = '#16a34a';
+    dom.repTriStatus.textContent = `✔ Intersección calculada: X=${sol.x.toFixed(2)}m, Y=${sol.y.toFixed(2)}m (Base 1➔2: ${sol.baseDist.toFixed(2)}m)`;
+
+    state.repositionNewCoords = { x: sol.x, y: sol.y };
+    dom.repResultCoords.textContent = `X=${sol.x.toFixed(2)} m, Y=${sol.y.toFixed(2)} m`;
+
+    const calcRes = window.TopoMath.calculateDesignElevationAtCoord(sol.x, sol.y, state.project.settings, []);
+    dom.repResultDesign.textContent = `${calcRes.elevation.toFixed(3)} m`;
+  }
+
+  async function applyRepositionStake() {
+    if (!state.repositionStake) return;
+
+    const newX = state.repositionNewCoords.x;
+    const newY = state.repositionNewCoords.y;
+
+    state.repositionStake.x = Math.round(newX * 1000) / 1000;
+    state.repositionStake.y = Math.round(newY * 1000) / 1000;
+
+    if (!state.repositionStake.isCustomDesign) {
+      const calcRes = window.TopoMath.calculateDesignElevationAtCoord(newX, newY, state.project.settings, []);
+      state.repositionStake.designElevation = calcRes.elevation;
+    }
+
+    if (state.repositionStake.measuredElevation !== null && state.repositionStake.measuredElevation !== undefined) {
+      state.repositionStake.cutFill = window.TopoMath.calculateCutFill(state.repositionStake.measuredElevation, state.repositionStake.designElevation);
+      const tolM = (state.project.settings.toleranceCm || 2.0) / 100;
+      state.repositionStake.status = window.TopoMath.evaluateStatus(state.repositionStake.cutFill, tolM).status;
+    }
+
+    await window.topoDB.saveStake(state.repositionStake);
+    updateCalculations();
+    closeRepositionModal();
+
+    renderGridTab();
+    renderCanvas2D();
+    renderExportTab();
+
+    alert(`✔ Estaca ${state.repositionStake.code} replanteada con éxito en:\nX = ${newX.toFixed(2)} m, Y = ${newY.toFixed(2)} m\nNueva Cota Rasante: ${state.repositionStake.designElevation.toFixed(3)} m`);
   }
 
   // Iniciar la app al cargar el DOM

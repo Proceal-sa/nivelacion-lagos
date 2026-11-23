@@ -19,12 +19,17 @@
     earthworkSummary: null,
     activeViewMode: '2d', // '2d' | 'table'
     isEditMode: false,
-    configMode: 'regular', // 'regular' | 'talud'
+    configMode: 'tape', // 'tape' | 'regular' | 'talud'
+    tapeAlignment: 'center', // 'center' | 'left' | 'right'
+    boxMode: 'stake', // 'stake' | 'tape'
+    boxTapeCoords: null,
     taludAngleDeg: 90,
     canvas: {
       panX: 60,
       panY: 60,
       zoom: 1.0,
+      rotationDeg: 0, // 0 | 90 | 180 | 270
+      flipX: false,
       isPanning: false,
       isDraggingStake: false,
       startX: 0,
@@ -67,6 +72,9 @@
     dom.canvas2DWrapper = document.getElementById('canvas-2d-wrapper');
     dom.lakeTinCanvas = document.getElementById('lake-tin-canvas');
     dom.canvasEditBanner = document.getElementById('canvas-edit-banner');
+    dom.canvasBtnRot90 = document.getElementById('canvas-btn-rot90');
+    dom.canvasBtnMirror = document.getElementById('canvas-btn-mirror');
+    dom.canvasViewBadge = document.getElementById('canvas-view-badge');
     dom.canvasBtnZoomIn = document.getElementById('canvas-btn-zoom-in');
     dom.canvasBtnZoomOut = document.getElementById('canvas-btn-zoom-out');
     dom.canvasBtnCenter = document.getElementById('canvas-btn-center');
@@ -76,10 +84,39 @@
 
     // Tab Configuración
     dom.cfgPondName = document.getElementById('cfg-pond-name');
+    dom.cfgModeTapeBtn = document.getElementById('cfg-mode-tape-btn');
     dom.cfgModeRegularBtn = document.getElementById('cfg-mode-regular-btn');
     dom.cfgModeTaludBtn = document.getElementById('cfg-mode-talud-btn');
+    dom.cfgSectionTape = document.getElementById('cfg-section-tape');
     dom.cfgSectionRegular = document.getElementById('cfg-section-regular');
     dom.cfgSectionTalud = document.getElementById('cfg-section-talud');
+
+    // Campos Modo Cinta (4 bordes + 2 diagonales)
+    dom.tapeL12 = document.getElementById('tape-l12');
+    dom.tapeL23 = document.getElementById('tape-l23');
+    dom.tapeL34 = document.getElementById('tape-l34');
+    dom.tapeL41 = document.getElementById('tape-l41');
+    dom.tapeD13 = document.getElementById('tape-d13');
+    dom.tapeD24 = document.getElementById('tape-d24');
+    dom.tapeClosureBadge = document.getElementById('tape-closure-badge');
+    dom.tapeClosureDesc = document.getElementById('tape-closure-desc');
+    dom.tapeRowPattern = document.getElementById('tape-row-pattern');
+    dom.tapeAlignCenterBtn = document.getElementById('tape-align-center-btn');
+    dom.tapeAlignLeftBtn = document.getElementById('tape-align-left-btn');
+    dom.tapeAlignRightBtn = document.getElementById('tape-align-right-btn');
+
+    // Caja de pesca modos (estaca vs cinta)
+    dom.boxModeStakeBtn = document.getElementById('box-mode-stake-btn');
+    dom.boxModeTapeBtn = document.getElementById('box-mode-tape-btn');
+    dom.boxSectionStake = document.getElementById('box-section-stake');
+    dom.boxSectionTape = document.getElementById('box-section-tape');
+    dom.boxRefCorner1 = document.getElementById('box-ref-corner1');
+    dom.boxDistCorner1 = document.getElementById('box-dist-corner1');
+    dom.boxRefCorner2 = document.getElementById('box-ref-corner2');
+    dom.boxDistCorner2 = document.getElementById('box-dist-corner2');
+    dom.btnCalcBoxTape = document.getElementById('btn-calc-box-tape');
+    dom.boxTapeResultBadge = document.getElementById('box-tape-result-badge');
+
     dom.taludLongSections = document.getElementById('talud-long-sections');
     dom.taludWidthSections = document.getElementById('talud-width-sections');
     dom.taludBtnAngle90 = document.getElementById('talud-btn-angle-90');
@@ -291,7 +328,7 @@
     }
   }
 
-  // --- CREAR PROYECTO INICIAL POR DEFECTO ---
+  // --- CREAR PROYECTO INICIAL POR DEFECTO (REPLANTEO 100% CINTA MÉTRICA) ---
   async function createDefaultProject() {
     const projId = 'proj_' + Date.now();
     const defaultProject = {
@@ -300,10 +337,19 @@
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       settings: {
+        meshMode: 'tape',
+        tapeL12: 60.0,
+        tapeL23: 45.0,
+        tapeL34: 58.0,
+        tapeL41: 44.0,
+        tapeD13: 74.5,
+        tapeD24: 73.8,
+        rowPattern: '5, 7, 7, 7, 5',
+        rowAlignment: 'center',
         rows: 5,           // Filas A..E
-        cols: 8,           // Columnas 1..8
-        dx: 10.0,          // 10 metros entre columnas
-        dy: 10.0,          // 10 metros entre filas
+        cols: 7,           // Columnas 1..7 (máximo en filas B, C, D)
+        dx: 10.0,          // 10 metros base
+        dy: 10.0,          // 10 metros base
         boxRow: 0,         // Fila A
         boxCol: 0,         // Columna 1
         boxElevation: 100.000, // Cota de Diseño más baja en la caja
@@ -315,6 +361,11 @@
         currentStationId: null
       }
     };
+
+    const quad = window.TopoMath.solveQuadrilateralTape(60.0, 45.0, 58.0, 44.0, 74.5, 73.8);
+    if (quad.success) {
+      defaultProject.settings.tapeCorners = quad;
+    }
 
     await window.topoDB.saveProject(defaultProject);
 
@@ -335,36 +386,8 @@
     defaultProject.settings.currentStationId = initialStation.id;
     await window.topoDB.saveProject(defaultProject);
 
-    // Generar estacas de la cuadrícula
-    const stakes = [];
-    for (let r = 0; r < defaultProject.settings.rows; r++) {
-      for (let c = 0; c < defaultProject.settings.cols; c++) {
-        const code = window.TopoMath.getStakeCode(r, c);
-        const coords = window.TopoMath.getCoordinates(r, c, defaultProject.settings.dx, defaultProject.settings.dy);
-        const designElev = window.TopoMath.calculateDesignElevation(r, c, defaultProject.settings);
-
-        stakes.push({
-          id: `${projId}_${r}_${c}`,
-          projId: projId,
-          row: r,
-          col: c,
-          code: code,
-          x: coords.x,
-          y: coords.y,
-          designElevation: designElev,
-          isCustomDesign: false,
-          reading: null,
-          measuredElevation: null,
-          stationId: null,
-          measuredAt: null,
-          cutFill: null,
-          status: 'PENDIENTE',
-          hasPuddleWarning: false,
-          puddleReason: null,
-          note: ''
-        });
-      }
-    }
+    // Generar estacas de la cuadrícula con 31 estacas (5, 7, 7, 7, 5)
+    const stakes = window.TopoMath.generateStakes(projId, defaultProject.settings);
     await window.topoDB.saveStakesBulk(stakes);
 
     return defaultProject;
@@ -467,29 +490,63 @@
       dom.viewModeTable.classList.add('active');
     }
 
-    // Renderizar tabla HTML de la cuadrícula
+    // Renderizar tabla HTML de la cuadrícula de forma dinámica (soporta filas irregulares y alineación)
     let html = '';
 
-    // Encabezado de columnas (Números 1..Cols)
+    const rowMap = new Map();
+    state.stakes.forEach(s => {
+      if (!rowMap.has(s.row)) rowMap.set(s.row, []);
+      rowMap.get(s.row).push(s);
+    });
+    rowMap.forEach(rowStakes => rowStakes.sort((a, b) => a.col - b.col));
+
+    const sortedRowIndices = Array.from(rowMap.keys()).sort((a, b) => a - b);
+    const numRows = sortedRowIndices.length > 0 ? sortedRowIndices.length : (state.project.settings.rows || 5);
+
+    let maxCols = 0;
+    sortedRowIndices.forEach(r => {
+      const len = rowMap.get(r).length;
+      if (len > maxCols) maxCols = len;
+    });
+    maxCols = Math.max(maxCols, state.project.settings.cols || 1);
+    const alignment = state.project.settings.rowAlignment || 'center';
+
+    // Encabezado de columnas (Números 1..maxCols)
     html += '<thead><tr><th class="stake-header-cell">#</th>';
-    for (let c = 0; c < cols; c++) {
+    for (let c = 0; c < maxCols; c++) {
       html += `<th class="stake-header-cell">${c + 1}</th>`;
     }
     html += '</tr></thead><tbody>';
 
-    // Filas (Letras A..Rows)
-    for (let r = 0; r < rows; r++) {
+    // Filas (Letras A..Rows con alineación de filas cortas)
+    for (let i = 0; i < numRows; i++) {
+      const r = sortedRowIndices.length > 0 ? sortedRowIndices[i] : i;
       const rowLetter = window.TopoMath.rowToLetter(r);
+      const rowStakes = rowMap.get(r) || [];
+      const countInRow = rowStakes.length;
+
+      let leftPad = 0;
+      if (alignment === 'center') {
+        leftPad = Math.floor((maxCols - countInRow) / 2);
+      } else if (alignment === 'right') {
+        leftPad = maxCols - countInRow;
+      }
+
       html += `<tr><th class="stake-header-cell">${rowLetter}</th>`;
 
-      for (let c = 0; c < cols; c++) {
-        const stake = state.stakes.find(s => s.row === r && s.col === c);
+      for (let c = 0; c < maxCols; c++) {
+        if (c < leftPad || c >= leftPad + countInRow) {
+          html += '<td></td>';
+          continue;
+        }
+
+        const stake = rowStakes[c - leftPad];
         if (!stake) {
           html += '<td></td>';
           continue;
         }
 
-        const isCaja = (r === boxRow && c === boxCol);
+        const isCaja = (r === boxRow && stake.col === boxCol);
         let cellClass = 'stake-cell';
         let diffHtml = '';
 
@@ -514,7 +571,7 @@
         }
 
         html += `
-          <td class="${cellClass}" data-row="${r}" data-col="${c}" data-id="${stake.id}">
+          <td class="${cellClass}" data-row="${stake.row}" data-col="${stake.col}" data-id="${stake.id}">
             <div class="stake-code">${stake.code}</div>
             <div class="stake-design-val">${stake.designElevation.toFixed(2)}</div>
             ${diffHtml}
@@ -531,14 +588,119 @@
     const cells = dom.lakeGridTable.querySelectorAll('.stake-cell');
     cells.forEach(cell => {
       cell.addEventListener('click', () => {
-        const r = parseInt(cell.getAttribute('data-row'), 10);
-        const c = parseInt(cell.getAttribute('data-col'), 10);
-        openStakeModalByCoord(r, c);
+        const id = cell.getAttribute('data-id');
+        const idx = state.stakes.findIndex(s => s.id === id);
+        if (idx !== -1) {
+          state.currentStakeIndex = idx;
+          openStakeModal();
+        } else {
+          const r = parseInt(cell.getAttribute('data-row'), 10);
+          const c = parseInt(cell.getAttribute('data-col'), 10);
+          openStakeModalByCoord(r, c);
+        }
       });
     });
   }
 
-  // --- MOTOR GRÁFICO DEL PLANO 2D ESCALA REAL (TIN / DELAUNAY) ---
+  // --- TRANSFORMACIÓN Y PROYECCIÓN DEL PLANO 2D (ROTACIÓN, ESPEJO, ESCALA) ---
+  function getPondTransform() {
+    const canvas = dom.lakeTinCanvas;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    state.stakes.forEach(s => {
+      if (s.x < minX) minX = s.x;
+      if (s.x > maxX) maxX = s.x;
+      if (s.y < minY) minY = s.y;
+      if (s.y > maxY) maxY = s.y;
+    });
+
+    // Considerar esquinas exteriores de cinta si existen
+    if (state.project?.settings?.tapeCorners?.corners) {
+      state.project.settings.tapeCorners.corners.forEach(c => {
+        if (c.x < minX) minX = c.x;
+        if (c.x > maxX) maxX = c.x;
+        if (c.y < minY) minY = c.y;
+        if (c.y > maxY) maxY = c.y;
+      });
+    }
+
+    if (!isFinite(minX)) {
+      minX = 0; maxX = 100; minY = 0; maxY = 100;
+    }
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const rotDeg = state.canvas.rotationDeg || 0;
+    const rad = (rotDeg * Math.PI) / 180;
+    const cosR = Math.cos(rad);
+    const sinR = Math.sin(rad);
+    const flip = state.canvas.flipX || false;
+
+    const toTransformed = (x, y) => {
+      let dx = x - cx;
+      let dy = y - cy;
+      if (flip) dx = -dx;
+      const rx = dx * cosR - dy * sinR;
+      const ry = dx * sinR + dy * cosR;
+      return { x: rx + cx, y: ry + cy };
+    };
+
+    const fromTransformed = (tx, ty) => {
+      let rx = tx - cx;
+      let ry = ty - cy;
+      let dx = rx * cosR + ry * sinR;
+      let dy = -rx * sinR + ry * cosR;
+      if (flip) dx = -dx;
+      return { x: dx + cx, y: dy + cy };
+    };
+
+    let tMinX = Infinity, tMaxX = -Infinity, tMinY = Infinity, tMaxY = -Infinity;
+    state.stakes.forEach(s => {
+      const t = toTransformed(s.x, s.y);
+      if (t.x < tMinX) tMinX = t.x;
+      if (t.x > tMaxX) tMaxX = t.x;
+      if (t.y < tMinY) tMinY = t.y;
+      if (t.y > tMaxY) tMaxY = t.y;
+    });
+
+    if (state.project?.settings?.tapeCorners?.corners) {
+      state.project.settings.tapeCorners.corners.forEach(c => {
+        const t = toTransformed(c.x, c.y);
+        if (t.x < tMinX) tMinX = t.x;
+        if (t.x > tMaxX) tMaxX = t.x;
+        if (t.y < tMinY) tMinY = t.y;
+        if (t.y > tMaxY) tMaxY = t.y;
+      });
+    }
+
+    if (!isFinite(tMinX)) {
+      tMinX = 0; tMaxX = 100; tMinY = 0; tMaxY = 100;
+    }
+
+    const spanX = Math.max(10, tMaxX - tMinX);
+    const spanY = Math.max(10, tMaxY - tMinY);
+    const padding = 50 * (window.devicePixelRatio || 1);
+    const availW = (canvas ? canvas.width : 800) - padding * 2;
+    const availH = (canvas ? canvas.height : 500) - padding * 2;
+    const scale = Math.min(availW / spanX, availH / spanY) * state.canvas.zoom;
+
+    const toPx = (x, y) => {
+      const t = toTransformed(x, y);
+      return {
+        x: padding + state.canvas.panX + (t.x - tMinX) * scale,
+        y: padding + state.canvas.panY + (t.y - tMinY) * scale
+      };
+    };
+
+    const fromPx = (px, py) => {
+      const tx = tMinX + (px - padding - state.canvas.panX) / scale;
+      const ty = tMinY + (py - padding - state.canvas.panY) / scale;
+      return fromTransformed(tx, ty);
+    };
+
+    return { toTransformed, fromTransformed, toPx, fromPx, scale, rotDeg, flip, minX, maxX, minY, maxY, tMinX, tMaxX, tMinY, tMaxY };
+  }
+
+  // --- MOTOR GRÁFICO DEL PLANO 2D ESCALA REAL (TIN / DELAUNAY CON VISTA ROTABLE) ---
   function renderCanvas2D() {
     const canvas = dom.lakeTinCanvas;
     if (!canvas || state.stakes.length === 0) return;
@@ -556,43 +718,64 @@
     ctx.clearRect(0, 0, w, h);
 
     const isDark = document.body.classList.contains('dark-mode');
+    const transform = getPondTransform();
 
-    // Calcular límites espaciales (Bounding Box)
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    state.stakes.forEach(s => {
-      if (s.x < minX) minX = s.x;
-      if (s.x > maxX) maxX = s.x;
-      if (s.y < minY) minY = s.y;
-      if (s.y > maxY) maxY = s.y;
-    });
+    // Actualizar badge de orientación visual
+    if (dom.canvasViewBadge) {
+      let badgeText = `👁️ Perspectiva: ${transform.rotDeg}° Normal`;
+      if (transform.rotDeg === 90) badgeText = `👁️ Perspectiva: 90° Derecha`;
+      if (transform.rotDeg === 180) badgeText = `👁️ Perspectiva: 180° Invertida`;
+      if (transform.rotDeg === 270) badgeText = `👁️ Perspectiva: 270° Izquierda`;
+      if (transform.flip) badgeText += ' (🪞 Espejo)';
+      dom.canvasViewBadge.textContent = badgeText;
+    }
 
-    const spanX = Math.max(10, maxX - minX);
-    const spanY = Math.max(10, maxY - minY);
-
-    // Factor de escala base para que quepa cómodamente en el lienzo
-    const padding = 50 * (window.devicePixelRatio || 1);
-    const availW = w - padding * 2;
-    const availH = h - padding * 2;
-    const scale = Math.min(availW / spanX, availH / spanY) * state.canvas.zoom;
-
-    const toPxX = (x) => padding + state.canvas.panX + (x - minX) * scale;
-    const toPxY = (y) => padding + state.canvas.panY + (y - minY) * scale;
-
-    // 1. Dibujar Malla de Fondo Sutil
+    // 1. Malla de fondo sutil rotada con la vista
     ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
     ctx.lineWidth = 1;
     const gridStep = state.project.settings.dx || 10;
-    for (let gx = Math.floor(minX / gridStep) * gridStep; gx <= maxX + gridStep; gx += gridStep) {
+    for (let gx = Math.floor(transform.minX / gridStep) * gridStep; gx <= transform.maxX + gridStep; gx += gridStep) {
+      const pTop = transform.toPx(gx, transform.minY);
+      const pBot = transform.toPx(gx, transform.maxY);
       ctx.beginPath();
-      ctx.moveTo(toPxX(gx), 0);
-      ctx.lineTo(toPxX(gx), h);
+      ctx.moveTo(pTop.x, pTop.y);
+      ctx.lineTo(pBot.x, pBot.y);
       ctx.stroke();
     }
-    for (let gy = Math.floor(minY / gridStep) * gridStep; gy <= maxY + gridStep; gy += gridStep) {
+    for (let gy = Math.floor(transform.minY / gridStep) * gridStep; gy <= transform.maxY + gridStep; gy += gridStep) {
+      const pLeft = transform.toPx(transform.minX, gy);
+      const pRight = transform.toPx(transform.maxX, gy);
       ctx.beginPath();
-      ctx.moveTo(0, toPxY(gy));
-      ctx.lineTo(w, toPxY(gy));
+      ctx.moveTo(pLeft.x, pLeft.y);
+      ctx.lineTo(pRight.x, pRight.y);
       ctx.stroke();
+    }
+
+    // 1.5 Dibujar Cuadrilátero Exterior con Cinta (si existe en modo tape)
+    if (state.project?.settings?.tapeCorners?.corners) {
+      const corners = state.project.settings.tapeCorners.corners;
+      if (corners.length === 4) {
+        ctx.strokeStyle = isDark ? 'rgba(56, 189, 248, 0.7)' : 'rgba(2, 132, 199, 0.7)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        const cp0 = transform.toPx(corners[0].x, corners[0].y);
+        ctx.moveTo(cp0.x, cp0.y);
+        for (let i = 1; i < 4; i++) {
+          const cpi = transform.toPx(corners[i].x, corners[i].y);
+          ctx.lineTo(cpi.x, cpi.y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // Rótulos de esquinas E1..E4
+        corners.forEach((cn, i) => {
+          const cp = transform.toPx(cn.x, cn.y);
+          ctx.fillStyle = isDark ? '#38bdf8' : '#0284c7';
+          ctx.font = `bold ${Math.max(10, 11 * (window.devicePixelRatio || 1))}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText(`E${i + 1}`, cp.x, cp.y - 14);
+        });
+      }
     }
 
     // 2. Calcular y Dibujar Red de Triángulos TIN (Delaunay) y Aristas con Distancias
@@ -614,12 +797,12 @@
         const p2 = state.stakes[edge.to];
         if (!p1 || !p2) return;
 
-        const x1 = toPxX(p1.x), y1 = toPxY(p1.y);
-        const x2 = toPxX(p2.x), y2 = toPxY(p2.y);
+        const pt1 = transform.toPx(p1.x, p1.y);
+        const pt2 = transform.toPx(p2.x, p2.y);
 
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
+        ctx.moveTo(pt1.x, pt1.y);
+        ctx.lineTo(pt2.x, pt2.y);
         ctx.stroke();
       });
       ctx.setLineDash([]);
@@ -636,16 +819,15 @@
         const p2 = state.stakes[edge.to];
         if (!p1 || !p2) return;
 
-        const x1 = toPxX(p1.x), y1 = toPxY(p1.y);
-        const x2 = toPxX(p2.x), y2 = toPxY(p2.y);
-        const midX = (x1 + x2) / 2;
-        const midY = (y1 + y2) / 2;
+        const pt1 = transform.toPx(p1.x, p1.y);
+        const pt2 = transform.toPx(p2.x, p2.y);
+        const midX = (pt1.x + pt2.x) / 2;
+        const midY = (pt1.y + pt2.y) / 2;
 
         const label = `${edge.length.toFixed(1)}m`;
         const textWidth = ctx.measureText(label).width + 8;
         const textHeight = 16 * (window.devicePixelRatio || 1);
 
-        // Fondo de pastilla para legibilidad de distancia
         ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)';
         ctx.strokeStyle = isDark ? '#475569' : '#cbd5e1';
         ctx.lineWidth = 1;
@@ -665,23 +847,21 @@
     const boxStake = state.stakes.find(s => s.row === boxRow && s.col === boxCol) || state.stakes[0];
 
     if (showFlow && boxStake) {
-      const bx = toPxX(boxStake.x);
-      const by = toPxY(boxStake.y);
+      const bpt = transform.toPx(boxStake.x, boxStake.y);
 
       state.stakes.forEach(s => {
         if (s.id === boxStake.id) return;
-        const sx = toPxX(s.x);
-        const sy = toPxY(s.y);
+        const spt = transform.toPx(s.x, s.y);
 
-        const angle = Math.atan2(by - sy, bx - sx);
+        const angle = Math.atan2(bpt.y - spt.y, bpt.x - spt.x);
         const len = 16 * (window.devicePixelRatio || 1);
-        const ax = sx + Math.cos(angle) * len;
-        const ay = sy + Math.sin(angle) * len;
+        const ax = spt.x + Math.cos(angle) * len;
+        const ay = spt.y + Math.sin(angle) * len;
 
         ctx.strokeStyle = 'rgba(2, 132, 199, 0.6)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(sx, sy);
+        ctx.moveTo(spt.x, spt.y);
         ctx.lineTo(ax, ay);
         ctx.stroke();
 
@@ -700,13 +880,12 @@
     const nodeRadius = 14 * (window.devicePixelRatio || 1);
     const tolMeters = (state.project.settings.toleranceCm || 2.0) / 100;
 
-    state.stakes.forEach((stake) => {
-      const px = toPxX(stake.x);
-      const py = toPxY(stake.y);
+    state.stakes.forEach(stake => {
+      const pt = transform.toPx(stake.x, stake.y);
+      const px = pt.x, py = pt.y;
       const isCaja = (boxStake && stake.id === boxStake.id);
       const isHovered = (state.canvas.hoveredStake && state.canvas.hoveredStake.id === stake.id);
 
-      // Color según estado de corte/relleno
       let fillColor = '#ffffff';
       let strokeColor = '#000000';
       let textColor = '#000000';
@@ -987,7 +1166,7 @@
     dom.cfgPondName.value = state.project.name || '';
     dom.cfgRows.value = s.rows;
     dom.cfgCols.value = s.cols;
-    dom.cfgRowPattern.value = s.rowPattern || '';
+    dom.cfgRowPattern.value = s.rowPattern || '5, 7, 7, 7, 5';
     dom.cfgDx.value = s.dx;
     dom.cfgDy.value = s.dy;
     dom.cfgBoxElev.value = s.boxElevation.toFixed(3);
@@ -997,11 +1176,24 @@
     dom.cfgSlopeRadial.value = s.slopeRadial ?? 0.60;
     dom.cfgTolerance.value = s.toleranceCm ?? 2.0;
 
-    // Configuración de modo de replanteo (Regular vs Taludes)
-    if (s.meshMode === 'talud') {
-      setConfigMode('talud');
-      if (s.taludLongSections) dom.taludLongSections.value = s.taludLongSections;
-      if (s.taludWidthSections) dom.taludWidthSections.value = s.taludWidthSections;
+    // Valores para modo cinta
+    if (dom.tapeL12) dom.tapeL12.value = s.tapeL12 ?? 60.0;
+    if (dom.tapeL23) dom.tapeL23.value = s.tapeL23 ?? 45.0;
+    if (dom.tapeL34) dom.tapeL34.value = s.tapeL34 ?? 58.0;
+    if (dom.tapeL41) dom.tapeL41.value = s.tapeL41 ?? 44.0;
+    if (dom.tapeD13) dom.tapeD13.value = s.tapeD13 ?? 74.50;
+    if (dom.tapeD24) dom.tapeD24.value = s.tapeD24 ?? 73.80;
+    if (dom.tapeRowPattern) dom.tapeRowPattern.value = s.rowPattern || '5, 7, 7, 7, 5';
+
+    selectTapeAlignment(s.rowAlignment || 'center');
+
+    // Configuración de modo activo
+    const currentMode = s.meshMode || 'tape';
+    setConfigMode(currentMode);
+
+    if (currentMode === 'talud') {
+      if (s.taludLongSections && dom.taludLongSections) dom.taludLongSections.value = s.taludLongSections;
+      if (s.taludWidthSections && dom.taludWidthSections) dom.taludWidthSections.value = s.taludWidthSections;
       if (s.taludAngleDeg !== undefined) {
         state.taludAngleDeg = s.taludAngleDeg;
         if (Math.abs(s.taludAngleDeg - 90) < 0.1) {
@@ -1010,9 +1202,9 @@
           selectTaludAngleMode('diag');
         }
       }
-    } else {
-      setConfigMode('regular');
     }
+
+    setBoxMode(s.boxMode || 'stake');
 
     // Actualizar selects de fila y columna de la caja
     updateBoxSelectOptions(s.rows, s.cols, s.boxRow, s.boxCol);
@@ -1023,16 +1215,93 @@
 
   function setConfigMode(mode) {
     state.configMode = mode;
-    if (mode === 'regular') {
-      if (dom.cfgModeRegularBtn) dom.cfgModeRegularBtn.classList.add('active');
-      if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.classList.remove('active');
-      if (dom.cfgSectionRegular) dom.cfgSectionRegular.style.display = 'block';
-      if (dom.cfgSectionTalud) dom.cfgSectionTalud.style.display = 'none';
+    if (dom.cfgModeTapeBtn) dom.cfgModeTapeBtn.classList.toggle('active', mode === 'tape');
+    if (dom.cfgModeRegularBtn) dom.cfgModeRegularBtn.classList.toggle('active', mode === 'regular');
+    if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.classList.toggle('active', mode === 'talud');
+
+    if (dom.cfgSectionTape) dom.cfgSectionTape.style.display = (mode === 'tape') ? 'block' : 'none';
+    if (dom.cfgSectionRegular) dom.cfgSectionRegular.style.display = (mode === 'regular') ? 'block' : 'none';
+    if (dom.cfgSectionTalud) dom.cfgSectionTalud.style.display = (mode === 'talud') ? 'block' : 'none';
+
+    if (mode === 'tape') {
+      updateTapeClosurePreview();
+    }
+  }
+
+  function setBoxMode(mode) {
+    state.boxMode = mode;
+    if (dom.boxModeStakeBtn) dom.boxModeStakeBtn.classList.toggle('active', mode === 'stake');
+    if (dom.boxModeTapeBtn) dom.boxModeTapeBtn.classList.toggle('active', mode === 'tape');
+    if (dom.boxSectionStake) dom.boxSectionStake.style.display = (mode === 'stake') ? 'block' : 'none';
+    if (dom.boxSectionTape) dom.boxSectionTape.style.display = (mode === 'tape') ? 'block' : 'none';
+  }
+
+  function selectTapeAlignment(align) {
+    state.tapeAlignment = align;
+    if (dom.tapeAlignCenterBtn) dom.tapeAlignCenterBtn.classList.toggle('active', align === 'center');
+    if (dom.tapeAlignLeftBtn) dom.tapeAlignLeftBtn.classList.toggle('active', align === 'left');
+    if (dom.tapeAlignRightBtn) dom.tapeAlignRightBtn.classList.toggle('active', align === 'right');
+  }
+
+  function updateTapeClosurePreview() {
+    if (!dom.tapeL12 || !dom.tapeL23 || !dom.tapeL34 || !dom.tapeL41 || !dom.tapeD13) return;
+    const l12 = parseFloat(dom.tapeL12.value);
+    const l23 = parseFloat(dom.tapeL23.value);
+    const l34 = parseFloat(dom.tapeL34.value);
+    const l41 = parseFloat(dom.tapeL41.value);
+    const d13 = parseFloat(dom.tapeD13.value);
+    const d24 = parseFloat(dom.tapeD24 ? dom.tapeD24.value : 0) || 0;
+
+    const res = window.TopoMath.solveQuadrilateralTape(l12, l23, l34, l41, d13, d24);
+    if (res.success) {
+      if (dom.tapeClosureBadge) {
+        dom.tapeClosureBadge.textContent = res.description;
+        dom.tapeClosureBadge.style.background = res.isClosed ? '#16a34a' : '#f59e0b';
+      }
+      if (dom.tapeClosureDesc) {
+        if (d24 > 0) {
+          dom.tapeClosureDesc.textContent = res.isClosed
+            ? `✔ Cierre de cinta validado. Diagonal 2 calculada: ${res.calculatedD24.toFixed(2)}m (Medida: ${d24.toFixed(2)}m, diferencia: ${res.closureErrorCm.toFixed(1)} cm)`
+            : `⚠ Descuadre en cinta: Diagonal 2 calculada ${res.calculatedD24.toFixed(2)}m vs medida ${d24.toFixed(2)}m (Diferencia: ${res.closureErrorCm.toFixed(1)} cm). Revisa cintada en campo.`;
+        } else {
+          dom.tapeClosureDesc.textContent = `Diagonal 2 teórica estimada: ${res.calculatedD24.toFixed(2)}m. Ingrese la medida de campo en D2-4 para validar el cierre geométrico.`;
+        }
+      }
     } else {
-      if (dom.cfgModeRegularBtn) dom.cfgModeRegularBtn.classList.remove('active');
-      if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.classList.add('active');
-      if (dom.cfgSectionRegular) dom.cfgSectionRegular.style.display = 'none';
-      if (dom.cfgSectionTalud) dom.cfgSectionTalud.style.display = 'block';
+      if (dom.tapeClosureBadge) {
+        dom.tapeClosureBadge.textContent = 'Error de Geometría';
+        dom.tapeClosureBadge.style.background = '#dc2626';
+      }
+      if (dom.tapeClosureDesc) {
+        dom.tapeClosureDesc.textContent = res.error;
+      }
+    }
+  }
+
+  function calcBoxTapePosition() {
+    if (!dom.boxDistCorner1 || !dom.boxDistCorner2) return;
+    const quad = state.project?.settings?.tapeCorners;
+    if (!quad || !quad.corners) {
+      alert('Primero guarde o calcule el cuadrilátero del lago con las medidas de cinta.');
+      return;
+    }
+    const c1Val = parseInt(dom.boxRefCorner1.value, 10);
+    const c2Val = parseInt(dom.boxRefCorner2.value, 10);
+    const corner1 = quad.corners.find(c => c.id === c1Val) || quad.corners[0];
+    const corner2 = quad.corners.find(c => c.id === c2Val) || quad.corners[1];
+    const d1 = parseFloat(dom.boxDistCorner1.value);
+    const d2 = parseFloat(dom.boxDistCorner2.value);
+
+    const res = window.TopoMath.solveFishingBoxFromCorners(corner1, d1, corner2, d2);
+    if (res.success) {
+      state.boxTapeCoords = { x: res.x, y: res.y };
+      if (dom.boxTapeResultBadge) {
+        dom.boxTapeResultBadge.textContent = `✔ Posición: X=${res.x.toFixed(2)}m, Y=${res.y.toFixed(2)}m`;
+        dom.boxTapeResultBadge.style.background = '#16a34a';
+      }
+      alert(`✔ Caja de pesca calculada por cinta:\nCoordenadas: X=${res.x.toFixed(2)} m, Y=${res.y.toFixed(2)} m`);
+    } else {
+      alert('Error al trilaterar caja de pesca:\n' + res.error);
     }
   }
 
@@ -1115,13 +1384,9 @@
 
   async function savePondConfig() {
     const newName = dom.cfgPondName.value.trim() || 'Lago Piscícola';
-    const newRows = parseInt(dom.cfgRows.value, 10);
-    const newCols = parseInt(dom.cfgCols.value, 10);
-    const newRowPattern = dom.cfgRowPattern.value.trim();
-    const newDx = parseFloat(dom.cfgDx.value);
-    const newDy = parseFloat(dom.cfgDy.value);
-    const newBoxRow = parseInt(dom.cfgBoxRow.value, 10);
-    const newBoxCol = parseInt(dom.cfgBoxCol.value, 10);
+    const s = state.project.settings;
+    state.project.name = newName;
+
     const newBoxElev = parseFloat(dom.cfgBoxElev.value);
     const newSlopeMode = dom.cfgSlopeMode.value;
     const newSlopeX = parseFloat(dom.cfgSlopeX.value);
@@ -1129,36 +1394,48 @@
     const newSlopeRadial = parseFloat(dom.cfgSlopeRadial.value);
     const newTolerance = parseFloat(dom.cfgTolerance.value);
 
-    if (isNaN(newRows) || isNaN(newCols) || newRows < 2 || newCols < 2) {
-      alert('Ingrese dimensiones válidas (mínimo 2 filas y 2 columnas).');
-      return;
-    }
-
-    const s = state.project.settings;
-    s.rows = newRows;
-    s.cols = newCols;
-    s.rowPattern = newRowPattern;
-    s.dx = newDx;
-    s.dy = newDy;
-    s.boxRow = newBoxRow;
-    s.boxCol = newBoxCol;
     s.boxElevation = newBoxElev;
     s.slopeMode = newSlopeMode;
     s.slopeX = newSlopeX;
     s.slopeY = newSlopeY;
     s.slopeRadial = newSlopeRadial;
     s.toleranceCm = newTolerance;
-    state.project.name = newName;
-
-    // Reconstruir o actualizar malla de estacas (regular o con patrón o paralela a taludes)
-    const existingStakesMap = new Map();
-    state.stakes.forEach(st => {
-      existingStakesMap.set(st.code, st);
-      existingStakesMap.set(`${st.row}_${st.col}`, st);
-    });
 
     let rawStakes;
-    if (state.configMode === 'talud') {
+
+    if (state.configMode === 'tape') {
+      const l12 = parseFloat(dom.tapeL12.value);
+      const l23 = parseFloat(dom.tapeL23.value);
+      const l34 = parseFloat(dom.tapeL34.value);
+      const l41 = parseFloat(dom.tapeL41.value);
+      const d13 = parseFloat(dom.tapeD13.value);
+      const d24 = parseFloat(dom.tapeD24 ? dom.tapeD24.value : 0) || 0;
+      const rowPat = dom.tapeRowPattern.value.trim() || '5, 7, 7, 7, 5';
+      const alignment = state.tapeAlignment || 'center';
+
+      const quadRes = window.TopoMath.solveQuadrilateralTape(l12, l23, l34, l41, d13, d24);
+      if (!quadRes.success) {
+        alert('Error en medidas de cinta:\n' + quadRes.error);
+        return;
+      }
+
+      s.meshMode = 'tape';
+      s.tapeL12 = l12;
+      s.tapeL23 = l23;
+      s.tapeL34 = l34;
+      s.tapeL41 = l41;
+      s.tapeD13 = d13;
+      s.tapeD24 = d24;
+      s.tapeCorners = quadRes;
+      s.rowPattern = rowPat;
+      s.rowAlignment = alignment;
+
+      const rowCounts = rowPat.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+      s.rows = rowCounts.length > 0 ? rowCounts.length : 5;
+      s.cols = rowCounts.length > 0 ? Math.max(...rowCounts) : 7;
+
+      rawStakes = window.TopoMath.generateQuadrilateralMesh(state.project.id, quadRes, s);
+    } else if (state.configMode === 'talud') {
       const taludRes = window.TopoMath.generateTaludMesh(
         dom.taludLongSections.value,
         dom.taludWidthSections.value,
@@ -1173,67 +1450,67 @@
       s.taludLongSections = dom.taludLongSections.value;
       s.taludWidthSections = dom.taludWidthSections.value;
       s.taludAngleDeg = state.taludAngleDeg;
-
-      // Asegurar que la caja quede dentro del rango de filas y columnas
-      if (s.boxRow >= s.rows) s.boxRow = 0;
-      if (s.boxCol >= s.cols) s.boxCol = 0;
     } else {
+      const newRows = parseInt(dom.cfgRows.value, 10) || 5;
+      const newCols = parseInt(dom.cfgCols.value, 10) || 8;
+      const newRowPattern = dom.cfgRowPattern.value.trim();
+      const newDx = parseFloat(dom.cfgDx.value) || 10;
+      const newDy = parseFloat(dom.cfgDy.value) || 10;
+
       s.meshMode = 'regular';
-      if (newRowPattern) {
-        rawStakes = window.TopoMath.generateStakes(state.project.id, s);
-      } else {
-        rawStakes = [];
-        for (let r = 0; r < newRows; r++) {
-          for (let c = 0; c < newCols; c++) {
-            const code = window.TopoMath.getStakeCode(r, c);
-            const x = c * newDx;
-            const y = r * newDy;
-            rawStakes.push({
-              id: `${state.project.id}_${r}_${c}`,
-              projId: state.project.id,
-              row: r,
-              col: c,
-              code: code,
-              x: x,
-              y: y,
-              designElevation: 0,
-              isCustomDesign: false,
-              reading: null,
-              measuredElevation: null,
-              stationId: null,
-              measuredAt: null,
-              cutFill: null,
-              status: 'PENDIENTE',
-              hasPuddleWarning: false,
-              puddleReason: null,
-              note: ''
-            });
-          }
-        }
-      }
+      s.dx = newDx;
+      s.dy = newDy;
+      s.rowPattern = newRowPattern;
+
+      const rowCounts = newRowPattern
+        ? newRowPattern.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+        : [];
+      s.rows = rowCounts.length > 0 ? rowCounts.length : newRows;
+      s.cols = rowCounts.length > 0 ? Math.max(...rowCounts) : newCols;
+
+      rawStakes = window.TopoMath.generateStakes(state.project.id, s);
     }
 
+    // Ubicación de caja de pesca
+    if (state.boxMode === 'tape' && state.boxTapeCoords) {
+      s.boxX = state.boxTapeCoords.x;
+      s.boxY = state.boxTapeCoords.y;
+      let closestStake = rawStakes[0];
+      let minDist = Infinity;
+      rawStakes.forEach(st => {
+        const d = Math.hypot(st.x - s.boxX, st.y - s.boxY);
+        if (d < minDist) { minDist = d; closestStake = st; }
+      });
+      s.boxRow = closestStake.row;
+      s.boxCol = closestStake.col;
+    } else {
+      const newBoxRow = parseInt(dom.cfgBoxRow.value, 10) || 0;
+      const newBoxCol = parseInt(dom.cfgBoxCol.value, 10) || 0;
+      s.boxRow = newBoxRow;
+      s.boxCol = newBoxCol;
+      delete s.boxX;
+      delete s.boxY;
+    }
+
+    if (s.boxRow >= s.rows) s.boxRow = 0;
+    if (s.boxCol >= s.cols) s.boxCol = 0;
+
+    // Preservar lecturas previas si existían
+    const existingStakesMap = new Map();
+    state.stakes.forEach(st => {
+      existingStakesMap.set(st.code, st);
+    });
+
     const updatedStakes = rawStakes.map(st => {
-      const existing = existingStakesMap.get(st.code) || existingStakesMap.get(`${st.row}_${st.col}`);
+      const existing = existingStakesMap.get(st.code);
       let designElev;
       let isCustom = false;
-      let realX = st.x;
-      let realY = st.y;
 
-      if (existing) {
-        if (state.configMode !== 'talud') {
-          realX = existing.x ?? st.x;
-          realY = existing.y ?? st.y;
-        }
-        if (existing.isCustomDesign) {
-          designElev = existing.designElevation;
-          isCustom = true;
-        } else {
-          const res = window.TopoMath.calculateDesignElevationAtCoord(realX, realY, s, []);
-          designElev = res.elevation;
-        }
+      if (existing && existing.isCustomDesign) {
+        designElev = existing.designElevation;
+        isCustom = true;
       } else {
-        const res = window.TopoMath.calculateDesignElevationAtCoord(realX, realY, s, []);
+        const res = window.TopoMath.calculateDesignElevationAtCoord(st.x, st.y, s, []);
         designElev = res.elevation;
       }
 
@@ -1250,24 +1527,18 @@
       }
 
       return {
-        id: st.id,
-        projId: state.project.id,
-        row: st.row,
-        col: st.col,
-        code: st.code,
-        x: realX,
-        y: realY,
+        ...st,
         designElevation: designElev,
         isCustomDesign: isCustom,
-        reading: reading,
+        reading,
         measuredElevation: groundElev,
-        stationId: stationId,
+        stationId,
         measuredAt: existing ? existing.measuredAt : null,
-        cutFill: cutFill,
-        status: status,
+        cutFill,
+        status,
         hasPuddleWarning: false,
         puddleReason: null,
-        note: existing ? existing.note : ''
+        note: existing ? (existing.note || '') : ''
       };
     });
 
@@ -1279,7 +1550,7 @@
     updateCalculations();
     renderAll();
 
-    alert('✔ Configuración guardada y rasantes recalculadas correctamente.');
+    alert(`✔ Configuración guardada y rasantes recalculadas.\nMalla activa: ${state.stakes.length} estacas.`);
     switchTab('tab-grid');
   }
 
@@ -2160,9 +2431,40 @@
     });
     dom.btnSaveConfig.addEventListener('click', savePondConfig);
 
-    // Modo de Replanteo (Malla Regular vs Taludes con Cinta)
+    // Controles de Vista de Plano 2D (Rotación 90° y Espejo)
+    if (dom.canvasBtnRot90) {
+      dom.canvasBtnRot90.addEventListener('click', () => {
+        state.canvas.rotationDeg = (state.canvas.rotationDeg + 90) % 360;
+        renderCanvas2D();
+      });
+    }
+    if (dom.canvasBtnMirror) {
+      dom.canvasBtnMirror.addEventListener('click', () => {
+        state.canvas.flipX = !state.canvas.flipX;
+        renderCanvas2D();
+      });
+    }
+
+    // Modo de Replanteo (Cinta vs Regular vs Talud)
+    if (dom.cfgModeTapeBtn) dom.cfgModeTapeBtn.addEventListener('click', () => setConfigMode('tape'));
     if (dom.cfgModeRegularBtn) dom.cfgModeRegularBtn.addEventListener('click', () => setConfigMode('regular'));
     if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.addEventListener('click', () => setConfigMode('talud'));
+
+    // Entradas dinámicas modo cinta métrica
+    const tapeInputs = [dom.tapeL12, dom.tapeL23, dom.tapeL34, dom.tapeL41, dom.tapeD13, dom.tapeD24];
+    tapeInputs.forEach(el => {
+      if (el) el.addEventListener('input', updateTapeClosurePreview);
+    });
+
+    if (dom.tapeAlignCenterBtn) dom.tapeAlignCenterBtn.addEventListener('click', () => selectTapeAlignment('center'));
+    if (dom.tapeAlignLeftBtn) dom.tapeAlignLeftBtn.addEventListener('click', () => selectTapeAlignment('left'));
+    if (dom.tapeAlignRightBtn) dom.tapeAlignRightBtn.addEventListener('click', () => selectTapeAlignment('right'));
+
+    // Modos de caja de pesca (estaca vs cinta)
+    if (dom.boxModeStakeBtn) dom.boxModeStakeBtn.addEventListener('click', () => setBoxMode('stake'));
+    if (dom.boxModeTapeBtn) dom.boxModeTapeBtn.addEventListener('click', () => setBoxMode('tape'));
+    if (dom.btnCalcBoxTape) dom.btnCalcBoxTape.addEventListener('click', calcBoxTapePosition);
+
     if (dom.taludBtnAngle90) dom.taludBtnAngle90.addEventListener('click', () => selectTaludAngleMode('90'));
     if (dom.taludBtnAngleDiag) dom.taludBtnAngleDiag.addEventListener('click', () => selectTaludAngleMode('diag'));
     if (dom.taludDiagA) dom.taludDiagA.addEventListener('input', updateTaludAngleFromDiagonal);
@@ -2321,6 +2623,46 @@
     return state.stakes.find(s => s.id === selId) || state.stakes[0];
   }
 
+  // Obtener vectores unitarios locales de fila (Derecha) y columna (Adelante) para el cadenero
+  function getLocalRowColVectors(baseStake) {
+    if (!baseStake || !state.stakes) return { uRow: { x: 1, y: 0 }, uCol: { x: 0, y: 1 } };
+
+    const r = baseStake.row;
+    const c = baseStake.col;
+
+    // 1. Vector Fila: hacia la estaca siguiente en la misma fila (Derecha +X)
+    let nextInRow = state.stakes.find(s => s.row === r && s.col === c + 1);
+    let prevInRow = state.stakes.find(s => s.row === r && s.col === c - 1);
+    let vx = 1, vy = 0;
+    if (nextInRow) {
+      vx = nextInRow.x - baseStake.x;
+      vy = nextInRow.y - baseStake.y;
+    } else if (prevInRow) {
+      vx = baseStake.x - prevInRow.x;
+      vy = baseStake.y - prevInRow.y;
+    }
+    const lenV = Math.hypot(vx, vy);
+    const uRow = lenV > 1e-4 ? { x: vx / lenV, y: vy / lenV } : { x: 1, y: 0 };
+
+    // 2. Vector Columna: hacia la fila siguiente (Adelante +Y)
+    let nextRowStake = state.stakes.find(s => s.row === r + 1 && s.col === c) ||
+                       state.stakes.find(s => s.row === r + 1);
+    let prevRowStake = state.stakes.find(s => s.row === r - 1 && s.col === c) ||
+                       state.stakes.find(s => s.row === r - 1);
+    let wx = -uRow.y, wy = uRow.x;
+    if (nextRowStake) {
+      wx = nextRowStake.x - baseStake.x;
+      wy = nextRowStake.y - baseStake.y;
+    } else if (prevRowStake) {
+      wx = baseStake.x - prevRowStake.x;
+      wy = baseStake.y - prevRowStake.y;
+    }
+    const lenW = Math.hypot(wx, wy);
+    const uCol = lenW > 1e-4 ? { x: wx / lenW, y: wy / lenW } : { x: -uRow.y, y: uRow.x };
+
+    return { uRow, uCol };
+  }
+
   function updateOffsetCalculations() {
     const baseStake = getSelectedBaseStake();
     if (!baseStake || !state.project || !state.activeStation) return;
@@ -2328,8 +2670,10 @@
     const dx = parseFloat(dom.offDxInput.value) || 0;
     const dy = parseFloat(dom.offDyInput.value) || 0;
 
-    const targetX = baseStake.x + dx;
-    const targetY = baseStake.y + dy;
+    // Orientar desfase a lo largo de los vectores reales de filas y columnas del lago
+    const { uRow, uCol } = getLocalRowColVectors(baseStake);
+    const targetX = baseStake.x + (dx * uRow.x) + (dy * uCol.x);
+    const targetY = baseStake.y + (dx * uRow.y) + (dy * uCol.y);
 
     // Mostrar coordenadas absolutas calculadas
     dom.offCoordDisplay.textContent = `X=${targetX.toFixed(2)} m, Y=${targetY.toFixed(2)} m`;
@@ -2442,15 +2786,13 @@
 
     const r = baseStake.row;
     const c = baseStake.col;
-    if (c + 1 < state.project.settings.cols) {
-      drawStakeNode(originX + gridSpacingX * scaleX, originY, window.TopoMath.getStakeCode(r, c + 1));
-    }
-    if (r + 1 < state.project.settings.rows) {
-      drawStakeNode(originX, originY + gridSpacingY * scaleY, window.TopoMath.getStakeCode(r + 1, c));
-    }
-    if (r + 1 < state.project.settings.rows && c + 1 < state.project.settings.cols) {
-      drawStakeNode(originX + gridSpacingX * scaleX, originY + gridSpacingY * scaleY, window.TopoMath.getStakeCode(r + 1, c + 1));
-    }
+    const nextInRow = state.stakes.find(s => s.row === r && s.col === c + 1);
+    const nextInCol = state.stakes.find(s => s.row === r + 1 && s.col === c) || state.stakes.find(s => s.row === r + 1);
+    const nextDiag = state.stakes.find(s => s.row === r + 1 && s.col === c + 1);
+
+    if (nextInRow) drawStakeNode(originX + gridSpacingX * scaleX, originY, nextInRow.code);
+    if (nextInCol) drawStakeNode(originX, originY + gridSpacingY * scaleY, nextInCol.code);
+    if (nextDiag) drawStakeNode(originX + gridSpacingX * scaleX, originY + gridSpacingY * scaleY, nextDiag.code);
 
     // Punto del Cadenero (Objetivo con desfase)
     const targetPx = originX + (currentDx * scaleX);
@@ -2584,46 +2926,17 @@
     };
 
     const getPondCoords = (px, py) => {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      state.stakes.forEach(s => {
-        if (s.x < minX) minX = s.x;
-        if (s.x > maxX) maxX = s.x;
-        if (s.y < minY) minY = s.y;
-        if (s.y > maxY) maxY = s.y;
-      });
-      const spanX = Math.max(10, maxX - minX);
-      const spanY = Math.max(10, maxY - minY);
-      const padding = 50 * (window.devicePixelRatio || 1);
-      const availW = canvas.width - padding * 2;
-      const availH = canvas.height - padding * 2;
-      const scale = Math.min(availW / spanX, availH / spanY) * state.canvas.zoom;
-
-      const pondX = minX + (px - padding - state.canvas.panX) / scale;
-      const pondY = minY + (py - padding - state.canvas.panY) / scale;
-      return { x: pondX, y: pondY };
+      const transform = getPondTransform();
+      return transform.fromPx(px, py);
     };
 
     const findStakeAtPos = (px, py) => {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      state.stakes.forEach(s => {
-        if (s.x < minX) minX = s.x;
-        if (s.x > maxX) maxX = s.x;
-        if (s.y < minY) minY = s.y;
-        if (s.y > maxY) maxY = s.y;
-      });
-      const spanX = Math.max(10, maxX - minX);
-      const spanY = Math.max(10, maxY - minY);
-      const padding = 50 * (window.devicePixelRatio || 1);
-      const availW = canvas.width - padding * 2;
-      const availH = canvas.height - padding * 2;
-      const scale = Math.min(availW / spanX, availH / spanY) * state.canvas.zoom;
-
+      const transform = getPondTransform();
       const hitRadius = 24 * (window.devicePixelRatio || 1);
 
       for (const stake of state.stakes) {
-        const sx = padding + state.canvas.panX + (stake.x - minX) * scale;
-        const sy = padding + state.canvas.panY + (stake.y - minY) * scale;
-        if (Math.hypot(px - sx, py - sy) <= hitRadius) {
+        const pt = transform.toPx(stake.x, stake.y);
+        if (Math.hypot(px - pt.x, py - pt.y) <= hitRadius) {
           return stake;
         }
       }

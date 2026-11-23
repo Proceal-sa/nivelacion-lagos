@@ -1222,19 +1222,21 @@ body.dark-mode .canvas-2d-container {
 }
 
 .canvas-ctrl-btn {
-  width: 42px;
+  min-width: 42px;
   height: 42px;
+  padding: 0 6px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.95);
   border: 2px solid var(--border-strong);
   color: #000000;
-  font-size: 1.25rem;
+  font-size: 0.95rem;
   font-weight: 900;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  white-space: nowrap;
 }
 
 body.dark-mode .canvas-ctrl-btn {
@@ -1462,4 +1464,24 @@ body.dark-mode .field-control-item {
   .reading-digits {
     font-size: 1.9rem;
   }
+}
+
+/* Campo con Unidad (m, cm, %) */
+.input-with-unit {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-unit .form-control {
+  padding-right: 32px;
+}
+
+.input-with-unit .unit-tag {
+  position: absolute;
+  right: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  pointer-events: none;
 }

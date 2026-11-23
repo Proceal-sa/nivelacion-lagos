@@ -143,17 +143,24 @@
           </button>
         </div>
 
-        <!-- Capas del Plano 2D -->
-        <div id="canvas-layer-controls" class="canvas-layer-toggles">
-          <label class="canvas-layer-toggle">
-            <input type="checkbox" id="chk-show-tin" checked> 🔺 Red TIN
-          </label>
-          <label class="canvas-layer-toggle">
-            <input type="checkbox" id="chk-show-distances" checked> 📏 Distancias (m)
-          </label>
-          <label class="canvas-layer-toggle">
-            <input type="checkbox" id="chk-show-flow" checked> 〰️ Flechas Drenaje
-          </label>
+        <!-- Capas del Plano 2D y Orientación de Vista -->
+        <div id="canvas-layer-controls" class="canvas-layer-toggles" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;">
+          <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+            <label class="canvas-layer-toggle">
+              <input type="checkbox" id="chk-show-tin" checked> 🔺 Red TIN
+            </label>
+            <label class="canvas-layer-toggle">
+              <input type="checkbox" id="chk-show-distances" checked> 📏 Distancias (m)
+            </label>
+            <label class="canvas-layer-toggle">
+              <input type="checkbox" id="chk-show-flow" checked> 〰️ Flechas Drenaje
+            </label>
+          </div>
+          <div>
+            <span id="canvas-view-badge" class="badge-offline" style="background: #0284c7; font-size: 0.78rem; font-weight: 700;">
+              👁️ Perspectiva: 0° Normal
+            </span>
+          </div>
         </div>
 
         <!-- CONTENEDOR DE PLANO 2D ESCALA REAL (CANVAS INTERACTIVO) -->
@@ -162,6 +169,8 @@
             <span>🛠️ MODO REPLANTEO ACTIVO: Arrastre o toque una estaca para moverla</span>
           </div>
           <div class="canvas-floating-controls">
+            <button id="canvas-btn-rot90" class="canvas-ctrl-btn" title="Rotar Vista 90° (Orientar según el nivel en campo)">🔄 90°</button>
+            <button id="canvas-btn-mirror" class="canvas-ctrl-btn" title="Invertir Vista (Espejo)">🪞</button>
             <button id="canvas-btn-zoom-in" class="canvas-ctrl-btn" title="Acercar">+</button>
             <button id="canvas-btn-zoom-out" class="canvas-ctrl-btn" title="Alejar">-</button>
             <button id="canvas-btn-center" class="canvas-ctrl-btn" title="Centrar Vista">🎯</button>
@@ -208,11 +217,14 @@
 
           <!-- Selector de Modo de Replanteo -->
           <div class="view-mode-bar" style="margin-bottom: 12px;">
-            <button id="cfg-mode-regular-btn" class="view-mode-btn active" type="button">
+            <button id="cfg-mode-tape-btn" class="view-mode-btn active" type="button">
+              <span>📏 100% Cinta (4 Bordes + 2 Diag)</span>
+            </button>
+            <button id="cfg-mode-regular-btn" class="view-mode-btn" type="button">
               <span>📐 Malla Ortogonal Base</span>
             </button>
             <button id="cfg-mode-talud-btn" class="view-mode-btn" type="button">
-              <span>🚜 Replanteo por Taludes con Cinta</span>
+              <span>🚜 Replanteo por Taludes</span>
             </button>
           </div>
 
@@ -221,8 +233,122 @@
             <input type="text" id="cfg-pond-name" class="form-control" value="Lago Piscícola 1 - Tilapia" placeholder="Ej. Lago Engorde 01">
           </div>
 
-          <!-- SECCIÓN A: Malla Regular / Dimensiones Base -->
-          <div id="cfg-section-regular">
+          <!-- SECCIÓN 1: REPLANTEO 100% CINTA MÉTRICA (4 BORDES + 2 DIAGONALES) -->
+          <div id="cfg-section-tape">
+            <div class="alert-box alert-info" style="margin-bottom: 12px; font-size: 0.84rem;">
+              <span>📏</span>
+              <div>
+                <strong>Modo Campo 100% Cinta Métrica:</strong>
+                Mide con cinta únicamente las 4 esquinas del lago (4 bordes y 2 diagonales). La app calcula la forma real exacta, verifica el cierre geométrico e interpola la cuadrícula interior.
+              </div>
+            </div>
+
+            <!-- 4 Bordes Perimetrales -->
+            <label class="form-label" style="font-size: 0.88rem; color: #0284c7; font-weight: 700;">
+              ① Medidas de los 4 Bordes Perimetrales (m):
+            </label>
+            <div class="form-grid-2" style="margin-bottom: 8px;">
+              <div class="form-group">
+                <label class="form-label" for="tape-l12">Lado 1 (Borde Frontal L1-2):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="tape-l12" class="form-control" step="0.1" value="60.0" placeholder="Ej. 60.0">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Esquina 1 (Izq) a Esquina 2 (Der)</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="tape-l23">Lado 2 (Borde Derecho L2-3):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="tape-l23" class="form-control" step="0.1" value="45.0" placeholder="Ej. 45.0">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Esquina 2 a Esquina 3 (Fondo-Der)</div>
+              </div>
+            </div>
+
+            <div class="form-grid-2" style="margin-bottom: 12px;">
+              <div class="form-group">
+                <label class="form-label" for="tape-l34">Lado 3 (Borde Trasero L3-4):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="tape-l34" class="form-control" step="0.1" value="58.0" placeholder="Ej. 58.0">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Esquina 3 a Esquina 4 (Fondo-Izq)</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="tape-l41">Lado 4 (Borde Izquierdo L4-1):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="tape-l41" class="form-control" step="0.1" value="44.0" placeholder="Ej. 44.0">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Esquina 4 a Esquina 1 (Inicio)</div>
+              </div>
+            </div>
+
+            <!-- 2 Diagonales Cruzadas -->
+            <label class="form-label" style="font-size: 0.88rem; color: #16a34a; font-weight: 700;">
+              ② Diagonales Cruzadas con Cinta (Forma y Cierre):
+            </label>
+            <div class="form-grid-2" style="margin-bottom: 8px;">
+              <div class="form-group">
+                <label class="form-label" for="tape-d13">Diagonal 1 (D1-3 Principal):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="tape-d13" class="form-control" step="0.05" value="74.50" placeholder="Ej. 74.5">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">De Esquina 1 a Esquina 3</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="tape-d24">Diagonal 2 (D2-4 Control Cierre):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="tape-d24" class="form-control" step="0.05" value="73.80" placeholder="Ej. 73.8">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">De Esquina 2 a Esquina 4</div>
+              </div>
+            </div>
+
+            <!-- Tarjeta de Control de Cierre Geométrico -->
+            <div class="card" style="padding: 10px; background-color: var(--bg-surface); margin-bottom: 12px; border: 1px solid var(--border-color);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 0.82rem; font-weight: 700;">Control de Cierre de Cinta:</span>
+                <span id="tape-closure-badge" class="badge-offline" style="background:#16a34a; font-size: 0.85rem;">
+                  ✔ Cierre Preciso
+                </span>
+              </div>
+              <div id="tape-closure-desc" style="font-size: 0.78rem; color: var(--text-muted);">
+                Calculando cierre...
+              </div>
+            </div>
+
+            <!-- Distribución de Estacas por Fila y Alineación -->
+            <label class="form-label" style="font-size: 0.88rem; color: #b45309; font-weight: 700;">
+              ③ Malla Interior por Filas (ej. 5, 7, 7, 7, 5):
+            </label>
+            <div class="form-group">
+              <label class="form-label" for="tape-row-pattern">Estacas por Fila (Letras A, B, C...):</label>
+              <input type="text" id="tape-row-pattern" class="form-control" value="5, 7, 7, 7, 5" placeholder="Ej. 5, 7, 7, 7, 5">
+              <div class="form-help">Ejemplo: 5, 7, 7, 7, 5 = 31 estacas en total (A1..A5, B1..B7, C1..C7, D1..D7, E1..E5).</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Alineación de Filas Cortas (para lagos ovalados o trapezoidales):</label>
+              <div class="view-mode-bar" style="margin-top: 4px;">
+                <button type="button" id="tape-align-center-btn" class="view-mode-btn active" data-align="center">
+                  <span>⏺ Centrada (Ovalado/Hexagonal)</span>
+                </button>
+                <button type="button" id="tape-align-left-btn" class="view-mode-btn" data-align="left">
+                  <span>◀ Izquierda (Borde 4-1)</span>
+                </button>
+                <button type="button" id="tape-align-right-btn" class="view-mode-btn" data-align="right">
+                  <span>▶ Derecha (Borde 2-3)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN 2: Malla Regular / Dimensiones Base -->
+          <div id="cfg-section-regular" style="display: none;">
             <div class="form-grid-2">
               <div class="form-group">
                 <label class="form-label" for="cfg-rows">Filas (Letras A, B...):</label>
@@ -238,7 +364,7 @@
 
             <div class="form-group">
               <label class="form-label" for="cfg-row-pattern">Patrón de Estacas por Fila (Opcional - Lago Irregular):</label>
-              <input type="text" id="cfg-row-pattern" class="form-control" placeholder="Ej. 5, 7, 7, 7, 5" value="">
+              <input type="text" id="cfg-row-pattern" class="form-control" placeholder="Ej. 5, 7, 7, 7, 5" value="5, 7, 7, 7, 5">
               <div class="form-help">Dejar vacío para malla regular, o especificar cuántas estacas lleva cada fila (ej. A=5, B=7, C=7, D=7, E=5)</div>
             </div>
 
@@ -256,12 +382,12 @@
             </div>
           </div>
 
-          <!-- SECCIÓN B: Malla Paralela a Taludes Reales con Cinta -->
+          <!-- SECCIÓN 3: Malla Paralela a Taludes Reales con Cinta -->
           <div id="cfg-section-talud" style="display: none;">
             <div class="alert-box alert-warning" style="margin-bottom: 10px; font-size: 0.82rem;">
               <span>📐</span>
               <div>
-                <strong>Modo Replanteo con Cinta en Campo:</strong>
+                <strong>Modo Replanteo por Taludes:</strong>
                 Define los tramos medidos a lo largo de los dos taludes principales y el ángulo real medido con diagonal. La malla interior se proyecta automáticamente paralela a ambos bordes.
               </div>
             </div>
@@ -329,18 +455,75 @@
             <h2 class="card-title">🚰 Caja de Pesca / Desagüe (Punto Más Bajo)</h2>
           </div>
 
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label class="form-label" for="cfg-box-row">Fila de la Caja:</label>
-              <select id="cfg-box-row" class="form-select">
-                <!-- Generado dinámicamente -->
-              </select>
+          <!-- Selector de Modo de Ubicación de Caja -->
+          <div class="view-mode-bar" style="margin-bottom: 10px;">
+            <button id="box-mode-stake-btn" class="view-mode-btn active" type="button">
+              <span>📍 Por Estaca o Esquina</span>
+            </button>
+            <button id="box-mode-tape-btn" class="view-mode-btn" type="button">
+              <span>📏 Por Cinta desde 2 Esquinas</span>
+            </button>
+          </div>
+
+          <!-- Opción A: Selección directa por fila y columna / estaca -->
+          <div id="box-section-stake">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label" for="cfg-box-row">Fila de la Caja:</label>
+                <select id="cfg-box-row" class="form-select">
+                  <!-- Generado dinámicamente -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="cfg-box-col">Columna de la Caja:</label>
+                <select id="cfg-box-col" class="form-select">
+                  <!-- Generado dinámicamente -->
+                </select>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="cfg-box-col">Columna de la Caja:</label>
-              <select id="cfg-box-col" class="form-select">
-                <!-- Generado dinámicamente -->
-              </select>
+          </div>
+
+          <!-- Opción B: Por medidas de cinta desde dos esquinas conocidas -->
+          <div id="box-section-tape" style="display: none;">
+            <div class="form-grid-2" style="margin-bottom: 8px;">
+              <div class="form-group">
+                <label class="form-label" for="box-ref-corner1">Desde Esquina 1:</label>
+                <select id="box-ref-corner1" class="form-select">
+                  <option value="1">Esquina 1 (Frontal-Izq / P1)</option>
+                  <option value="2">Esquina 2 (Frontal-Der / P2)</option>
+                  <option value="3">Esquina 3 (Trasera-Der / P3)</option>
+                  <option value="4">Esquina 4 (Trasera-Izq / P4)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="box-dist-corner1">Distancia Cinta 1 (m):</label>
+                <input type="number" id="box-dist-corner1" class="form-control" step="0.1" value="12.0">
+              </div>
+            </div>
+
+            <div class="form-grid-2" style="margin-bottom: 8px;">
+              <div class="form-group">
+                <label class="form-label" for="box-ref-corner2">Desde Esquina 2:</label>
+                <select id="box-ref-corner2" class="form-select">
+                  <option value="2" selected>Esquina 2 (Frontal-Der / P2)</option>
+                  <option value="1">Esquina 1 (Frontal-Izq / P1)</option>
+                  <option value="3">Esquina 3 (Trasera-Der / P3)</option>
+                  <option value="4">Esquina 4 (Trasera-Izq / P4)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="box-dist-corner2">Distancia Cinta 2 (m):</label>
+                <input type="number" id="box-dist-corner2" class="form-control" step="0.1" value="48.0">
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+              <button id="btn-calc-box-tape" type="button" class="btn btn-outline" style="min-height: 38px;">
+                🎯 Calcular Posición Caja
+              </button>
+              <span id="box-tape-result-badge" class="badge-offline" style="background:#0284c7; font-size: 0.8rem;">
+                X=12.0m, Y=5.0m
+              </span>
             </div>
           </div>
 

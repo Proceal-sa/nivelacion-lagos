@@ -281,7 +281,20 @@ const TopoMath = {
     const baseElevation = settings.boxElevation ?? 100.0;
     const slopeMode = settings.slopeMode || 'orthogonal';
 
-    const boxPos = this.getCoordinates(boxRow, boxCol, dx, dy);
+    // Determinar coordenadas reales de la caja de pesca
+    let boxX, boxY;
+    if (settings.boxX !== undefined && settings.boxY !== undefined && !isNaN(settings.boxX) && !isNaN(settings.boxY)) {
+      boxX = Number(settings.boxX);
+      boxY = Number(settings.boxY);
+    } else if (stakes && stakes.length > 0) {
+      const boxStake = stakes.find(s => s.row === boxRow && s.col === boxCol) || stakes[0];
+      boxX = boxStake.x;
+      boxY = boxStake.y;
+    } else {
+      const boxPos = this.getCoordinates(boxRow, boxCol, dx, dy);
+      boxX = boxPos.x;
+      boxY = boxPos.y;
+    }
 
     // Check if any stake has a custom design elevation override
     if (stakes && stakes.length >= 3) {
@@ -303,8 +316,8 @@ const TopoMath = {
     }
 
     // Pure mathematical formula based on drainage slope mode
-    const deltaX = Math.abs(x - boxPos.x);
-    const deltaY = Math.abs(y - boxPos.y);
+    const deltaX = Math.abs(x - boxX);
+    const deltaY = Math.abs(y - boxY);
 
     if (slopeMode === 'orthogonal') {
       const sx = (settings.slopeX ?? 0.5) / 100;
@@ -589,8 +602,216 @@ const TopoMath = {
     };
   },
 
-  // Generates stakes array with either regular grid or variable row counts (e.g. "5, 7, 7, 7, 5")
+  // =========================================================================
+  // REPLANTEO 100% CINTA MÉTRICA (4 BORDES + 2 DIAGONALES) & MALLA IRREGULAR
+  // =========================================================================
+
+  /**
+   * Resuelve los 4 vértices del cuadrilátero del lago usando medidas de cinta métrica
+   * y Ley de Cosenos (Trilateración pura sin necesidad de ángulos ni rumbos).
+   * P1 = (0, 0) [Esquina Frontal Izquierda]
+   * P2 = (L12, 0) [Esquina Frontal Derecha]
+   * P3 = Trilaterado con L12, L23 y Diagonal D13 [Esquina Trasera Derecha]
+   * P4 = Trilaterado con L41, L34 y Diagonal D13 [Esquina Trasera Izquierda]
+   * Cierre Geométrico: Compara la distancia calculada P2-P4 con D24 medida.
+   */
+  solveQuadrilateralTape(L12, L23, L34, L41, D13, D24 = 0) {
+    const l12 = Number(L12);
+    const l23 = Number(L23);
+    const l34 = Number(L34);
+    const l41 = Number(L41);
+    const d13 = Number(D13);
+    const d24 = Number(D24);
+
+    if (l12 <= 0 || l23 <= 0 || l34 <= 0 || l41 <= 0 || d13 <= 0) {
+      return { success: false, error: 'Todas las medidas de borde y la diagonal D13 deben ser mayores a 0' };
+    }
+
+    // Validación Desigualdad Triangular para Triángulo 1-2-3 (l12, l23, d13)
+    if (l12 + l23 <= d13 || l12 + d13 <= l23 || l23 + d13 <= l12) {
+      return { success: false, error: 'El Triángulo 1-2-3 (Borde Frontal, Borde Derecho, Diagonal 1) no cierra geométricamente con las medidas ingresadas.' };
+    }
+
+    // Validación Desigualdad Triangular para Triángulo 1-4-3 (l41, l34, d13)
+    if (l41 + l34 <= d13 || l41 + d13 <= l34 || l34 + d13 <= l41) {
+      return { success: false, error: 'El Triángulo 1-4-3 (Borde Izquierdo, Borde Trasero, Diagonal 1) no cierra geométricamente con las medidas ingresadas.' };
+    }
+
+    // 1. P1 en origen y P2 sobre el eje base
+    const P1 = { x: 0, y: 0 };
+    const P2 = { x: l12, y: 0 };
+
+    // 2. Resolver P3 en Triángulo 1-2-3 usando el ángulo interior en P2 (theta2)
+    // Por Ley de Cosenos: d13^2 = l12^2 + l23^2 - 2 * l12 * l23 * cos(theta2)
+    const cosTheta2 = (l12 * l12 + l23 * l23 - d13 * d13) / (2 * l12 * l23);
+    const clampedCosTheta2 = Math.max(-1, Math.min(1, cosTheta2));
+    const sinTheta2 = Math.sqrt(Math.max(0, 1 - clampedCosTheta2 * clampedCosTheta2));
+
+    const P3 = {
+      x: l12 - l23 * clampedCosTheta2,
+      y: l23 * sinTheta2
+    };
+
+    // 3. Resolver P4 en Triángulo 1-4-3 usando el ángulo interior en P1 (gamma1) respecto a la diagonal P1-P3
+    // Por Ley de Cosenos: l34^2 = l41^2 + d13^2 - 2 * l41 * d13 * cos(gamma1)
+    const cosGamma1 = (l41 * l41 + d13 * d13 - l34 * l34) / (2 * l41 * d13);
+    const clampedCosGamma1 = Math.max(-1, Math.min(1, cosGamma1));
+    const gamma1 = Math.acos(clampedCosGamma1);
+
+    // Ángulo de la diagonal P1 -> P3
+    const phi13 = Math.atan2(P3.y, P3.x);
+    // Vértice P4 queda a la izquierda del vector P1->P3 (hacia el interior del cuadrilátero)
+    const phi14 = phi13 + gamma1;
+
+    const P4 = {
+      x: l41 * Math.cos(phi14),
+      y: l41 * Math.sin(phi14)
+    };
+
+    // 4. Chequeo de Cierre con Diagonal 2 (D24)
+    const calcD24 = Math.hypot(P4.x - P2.x, P4.y - P2.y);
+    let closureErrorM = 0;
+    let closureErrorCm = 0;
+    let isClosed = true;
+
+    if (d24 > 0) {
+      closureErrorM = Math.abs(d24 - calcD24);
+      closureErrorCm = Math.round(closureErrorM * 1000) / 10;
+      isClosed = closureErrorM <= 0.10; // Tolerancia 10 cm
+    }
+
+    return {
+      success: true,
+      P1: { x: Math.round(P1.x * 1000) / 1000, y: Math.round(P1.y * 1000) / 1000 },
+      P2: { x: Math.round(P2.x * 1000) / 1000, y: Math.round(P2.y * 1000) / 1000 },
+      P3: { x: Math.round(P3.x * 1000) / 1000, y: Math.round(P3.y * 1000) / 1000 },
+      P4: { x: Math.round(P4.x * 1000) / 1000, y: Math.round(P4.y * 1000) / 1000 },
+      corners: [
+        { id: 1, label: 'E1 (Frontal-Izq)', x: P1.x, y: P1.y },
+        { id: 2, label: 'E2 (Frontal-Der)', x: P2.x, y: P2.y },
+        { id: 3, label: 'E3 (Trasera-Der)', x: P3.x, y: P3.y },
+        { id: 4, label: 'E4 (Trasera-Izq)', x: P4.x, y: P4.y }
+      ],
+      calculatedD24: Math.round(calcD24 * 1000) / 1000,
+      measuredD24: d24 > 0 ? d24 : null,
+      closureErrorMeters: Math.round(closureErrorM * 1000) / 1000,
+      closureErrorCm,
+      isClosed,
+      description: d24 > 0
+        ? (isClosed
+            ? `✔ Cierre Preciso (±${closureErrorCm.toFixed(1)} cm)`
+            : `⚠ Descuadre en cinta: ±${closureErrorCm.toFixed(1)} cm (Diag 2 calc: ${calcD24.toFixed(2)}m vs medida: ${d24.toFixed(2)}m)`)
+        : `Diagonal 2 Teórica: ${calcD24.toFixed(2)}m (Sin medir en campo)`
+    };
+  },
+
+  /**
+   * Genera la malla interior interpolando bilinealmente sobre el cuadrilátero deformado
+   * respetando el patrón de estacas por fila (ej. "5, 7, 7, 7, 5") y la alineación.
+   */
+  generateQuadrilateralMesh(projId, corners, settings) {
+    const { P1, P2, P3, P4 } = corners;
+    const rowCounts = settings.rowPattern
+      ? settings.rowPattern.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+      : [];
+
+    const numRows = rowCounts.length > 0 ? rowCounts.length : (settings.rows || 5);
+    const maxCols = rowCounts.length > 0 ? Math.max(...rowCounts) : (settings.cols || 7);
+    const alignment = settings.rowAlignment || 'center'; // 'center', 'left', 'right'
+
+    const stakes = [];
+
+    for (let r = 0; r < numRows; r++) {
+      const countInRow = rowCounts.length > 0 ? rowCounts[r] : maxCols;
+      // Parámetro vertical v en [0, 1] desde borde frontal (r=0) hasta trasero (r=numRows-1)
+      const v = numRows > 1 ? r / (numRows - 1) : 0;
+
+      for (let c = 0; c < countInRow; c++) {
+        // Cálculo de columna efectiva según alineamiento
+        let cEff = c;
+        if (alignment === 'center') {
+          const offset = (maxCols - countInRow) / 2;
+          cEff = offset + c;
+        } else if (alignment === 'right') {
+          cEff = (maxCols - countInRow) + c;
+        } else {
+          cEff = c;
+        }
+
+        // Parámetro horizontal u en [0, 1]
+        const u = maxCols > 1 ? cEff / (maxCols - 1) : 0.5;
+
+        // Interpolación bilineal sobre el cuadrilátero deformado
+        // P(u, v) = (1-u)(1-v)*P1 + u(1-v)*P2 + u*v*P3 + (1-u)*v*P4
+        const x = (1 - u) * (1 - v) * P1.x + u * (1 - v) * P2.x + u * v * P3.x + (1 - u) * v * P4.x;
+        const y = (1 - u) * (1 - v) * P1.y + u * (1 - v) * P2.y + u * v * P3.y + (1 - u) * v * P4.y;
+
+        const code = this.getStakeCode(r, c);
+        const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+
+        stakes.push({
+          id: `${projId}_${r}_${c}`,
+          projId: projId,
+          row: r,
+          col: c,
+          code: code,
+          x: Math.round(x * 1000) / 1000,
+          y: Math.round(y * 1000) / 1000,
+          designElevation: designElev.elevation,
+          isCustomDesign: false,
+          reading: null,
+          measuredElevation: null,
+          stationId: null,
+          measuredAt: null,
+          cutFill: null,
+          status: 'PENDIENTE',
+          hasPuddleWarning: false,
+          puddleReason: null,
+          note: ''
+        });
+      }
+    }
+
+    return stakes;
+  },
+
+  /**
+   * Resuelve la ubicación de la Caja de Pesca por medidas de cinta desde 2 esquinas conocidas
+   */
+  solveFishingBoxFromCorners(corner1, dist1, corner2, dist2) {
+    const c1 = corner1;
+    const c2 = corner2;
+    const d1 = Number(dist1);
+    const d2 = Number(dist2);
+
+    const D = Math.hypot(c2.x - c1.x, c2.y - c1.y);
+    if (D < 1e-4) return { success: false, error: 'Las esquinas de referencia no pueden coincidir' };
+    if (d1 + d2 < D || Math.abs(d1 - d2) > D) {
+      return { success: false, error: 'Las distancias de cinta no se intersectan (triángulo no cierra)' };
+    }
+
+    const a = (d1 * d1 - d2 * d2 + D * D) / (2 * D);
+    const h = Math.sqrt(Math.max(0, d1 * d1 - a * a));
+
+    const angleBase = Math.atan2(c2.y - c1.y, c2.x - c1.x);
+
+    // Vértice hacia el interior (lado con Y mayor / ángulo positivo)
+    const x1 = c1.x + a * Math.cos(angleBase) - h * Math.sin(angleBase);
+    const y1 = c1.y + a * Math.sin(angleBase) + h * Math.cos(angleBase);
+
+    return {
+      success: true,
+      x: Math.round(x1 * 1000) / 1000,
+      y: Math.round(y1 * 1000) / 1000
+    };
+  },
+
+  // Generates stakes array with either regular grid, tape quadrilateral, or variable row counts (e.g. "5, 7, 7, 7, 5")
   generateStakes(projId, settings) {
+    if (settings.meshMode === 'tape' && settings.tapeCorners) {
+      return this.generateQuadrilateralMesh(projId, settings.tapeCorners, settings);
+    }
+
     const stakes = [];
     const dx = settings.dx || 10;
     const dy = settings.dy || 10;
@@ -599,13 +820,25 @@ const TopoMath = {
       : [];
 
     const numRows = rowCounts.length > 0 ? rowCounts.length : (settings.rows || 5);
+    const maxCols = rowCounts.length > 0 ? Math.max(...rowCounts) : (settings.cols || 8);
+    const alignment = settings.rowAlignment || 'center';
 
     for (let r = 0; r < numRows; r++) {
       const colsInRow = rowCounts.length > 0 ? rowCounts[r] : (settings.cols || 8);
       for (let c = 0; c < colsInRow; c++) {
+        let cEff = c;
+        if (alignment === 'center') {
+          const offset = (maxCols - colsInRow) / 2;
+          cEff = offset + c;
+        } else if (alignment === 'right') {
+          cEff = (maxCols - colsInRow) + c;
+        } else {
+          cEff = c;
+        }
+
         const code = this.getStakeCode(r, c);
-        const x = c * dx;
-        const y = r * dy;
+        const x = Math.round(cEff * dx * 1000) / 1000;
+        const y = Math.round(r * dy * 1000) / 1000;
         const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
 
         stakes.push({

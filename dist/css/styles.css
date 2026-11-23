@@ -1324,6 +1324,42 @@ body.dark-mode .canvas-mode-banner {
   display: block;
 }
 
+/* ============================================================
+   ESTILOS PARA PESTAÑA DE MAQUINARIA Y CUBICACIÓN EXACTA TIN
+   ============================================================ */
+.machinery-summary-box {
+  background: var(--bg-surface);
+  border: 2px solid var(--primary-accent);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+body.dark-mode #tab-machinery .card {
+  background: var(--bg-surface) !important;
+  border-color: #0369a1 !important;
+}
+
+body.dark-mode #tab-machinery .card-header {
+  border-bottom-color: #0369a1 !important;
+}
+
+body.dark-mode .mach-box-inner {
+  background: var(--bg-surface-elevated) !important;
+  border-color: #38bdf8 !important;
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .mach-subcard-total {
+  background: #3a1515 !important;
+  border-color: #ef4444 !important;
+}
+
+body.dark-mode .mach-subcard-surplus {
+  background: #143822 !important;
+  border-color: #22c55e !important;
+}
+
 /* Media queries para optimización en smartphones */
 @media (max-width: 480px) {
   .brand-title {

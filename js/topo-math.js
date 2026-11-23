@@ -631,6 +631,318 @@ const TopoMath = {
       }
     }
     return stakes;
+  },
+
+  // Solve real angle between two embankments (taludes) using Law of Cosines
+  // a = distance on long edge, b = distance on width edge, c = measured diagonal
+  solveLawOfCosinesAngle(a, b, c) {
+    const numA = Number(a);
+    const numB = Number(b);
+    const numC = Number(c);
+
+    if (numA <= 0 || numB <= 0 || numC <= 0) {
+      return { success: false, error: 'Las distancias deben ser mayores a 0' };
+    }
+    if (numA + numB <= numC || numA + numC <= numB || numB + numC <= numA) {
+      return { success: false, error: 'Las distancias no forman un triángulo válido (no se alcanzan)' };
+    }
+
+    const cosTheta = (numA * numA + numB * numB - numC * numC) / (2 * numA * numB);
+    const clampedCos = Math.max(-1, Math.min(1, cosTheta));
+    const rad = Math.acos(clampedCos);
+    const deg = (rad * 180) / Math.PI;
+
+    return {
+      success: true,
+      angleDeg: Math.round(deg * 100) / 100,
+      angleRad: rad,
+      cosTheta: clampedCos,
+      description: `${deg.toFixed(1)}° (${deg < 89 ? 'Ángulo Agudo' : deg > 91 ? 'Ángulo Obtuso' : 'Escuadra ~90°'})`
+    };
+  },
+
+  // Generates complete mesh parallel to two real embankments / taludes
+  generateTaludMesh(longSectionsStr, widthSectionsStr, angleDeg, settings, projId) {
+    // Parse long edge intervals
+    const parseIntervals = (str, fallbackStep) => {
+      if (!str || !str.trim()) return [fallbackStep, fallbackStep, fallbackStep];
+      const parts = str.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n) && n > 0);
+      return parts.length > 0 ? parts : [fallbackStep, fallbackStep, fallbackStep];
+    };
+
+    const longIntervals = parseIntervals(longSectionsStr, settings.dx || 10);
+    const widthIntervals = parseIntervals(widthSectionsStr, settings.dy || 10);
+
+    // Cumulative distances from origin (0,0)
+    const longDists = [0];
+    let curL = 0;
+    for (const val of longIntervals) {
+      curL += val;
+      longDists.push(Math.round(curL * 1000) / 1000);
+    }
+
+    const widthDists = [0];
+    let curW = 0;
+    for (const val of widthIntervals) {
+      curW += val;
+      widthDists.push(Math.round(curW * 1000) / 1000);
+    }
+
+    const rad = (Number(angleDeg) * Math.PI) / 180;
+    const cosA = Math.cos(rad);
+    const sinA = Math.sin(rad);
+
+    const stakes = [];
+    const numRows = widthDists.length;
+    const numCols = longDists.length;
+
+    for (let r = 0; r < numRows; r++) {
+      const W = widthDists[r];
+      for (let c = 0; c < numCols; c++) {
+        const L = longDists[c];
+
+        // Coordinate projection parallel to slopes
+        const x = Math.round((L + W * cosA) * 1000) / 1000;
+        const y = Math.round((W * sinA) * 1000) / 1000;
+
+        const code = this.getStakeCode(r, c);
+        const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+
+        stakes.push({
+          id: `${projId}_${r}_${c}`,
+          projId: projId,
+          row: r,
+          col: c,
+          code: code,
+          x: x,
+          y: y,
+          designElevation: designElev.elevation,
+          isCustomDesign: false,
+          reading: null,
+          measuredElevation: null,
+          stationId: null,
+          measuredAt: null,
+          cutFill: null,
+          status: 'PENDIENTE',
+          hasPuddleWarning: false,
+          puddleReason: null,
+          note: ''
+        });
+      }
+    }
+
+    return {
+      stakes,
+      numRows,
+      numCols,
+      longIntervals,
+      widthIntervals,
+      totalLength: curL,
+      totalWidth: curW,
+      angleDeg: Number(angleDeg)
+    };
+  },
+
+  // Exact TIN volume calculation using zero-contour linear subdivision
+  // Subdivides mixed triangles into pure Cut (+) and pure Fill (-) sub-volumes
+  calculateExactTINVolumes(stakes, triangles, settings) {
+    if (!triangles || triangles.length === 0 || !stakes || stakes.length === 0) {
+      return this.calculateEarthworkVolumes(stakes, settings);
+    }
+
+    let totalCutBank = 0;
+    let totalFillGeom = 0;
+    let totalAreaMeasured = 0;
+    let measuredTrianglesCount = 0;
+
+    for (const tri of triangles) {
+      const p1 = stakes[tri[0]];
+      const p2 = stakes[tri[1]];
+      const p3 = stakes[tri[2]];
+
+      if (!p1 || !p2 || !p3) continue;
+
+      // Only evaluate if all 3 vertices have measured elevations
+      if (p1.cutFill === null || p1.cutFill === undefined ||
+          p2.cutFill === null || p2.cutFill === undefined ||
+          p3.cutFill === null || p3.cutFill === undefined) {
+        continue;
+      }
+
+      measuredTrianglesCount++;
+
+      // Triangle 2D Area
+      const area = 0.5 * Math.abs((p2.x - p1.x) * (p3.y - p1.y) - (p3.x - p1.x) * (p2.y - p1.y));
+      totalAreaMeasured += area;
+
+      const h1 = p1.cutFill;
+      const h2 = p2.cutFill;
+      const h3 = p3.cutFill;
+
+      // Tolerance for numerical zero
+      const eps = 1e-5;
+
+      // CASE 1: All vertices in pure CUT (h >= 0)
+      if (h1 >= -eps && h2 >= -eps && h3 >= -eps) {
+        const vCut = area * (Math.max(0, h1) + Math.max(0, h2) + Math.max(0, h3)) / 3;
+        totalCutBank += vCut;
+        continue;
+      }
+
+      // CASE 2: All vertices in pure FILL (h <= 0)
+      if (h1 <= eps && h2 <= eps && h3 <= eps) {
+        const vFill = area * (Math.abs(h1) + Math.abs(h2) + Math.abs(h3)) / 3;
+        totalFillGeom += vFill;
+        continue;
+      }
+
+      // CASE 3: Mixed Triangle (Zero contour line crosses the triangle)
+      const verts = [
+        { x: p1.x, y: p1.y, h: h1 },
+        { x: p2.x, y: p2.y, h: h2 },
+        { x: p3.x, y: p3.y, h: h3 }
+      ];
+
+      const pos = verts.filter(v => v.h > 0);
+      const neg = verts.filter(v => v.h <= 0);
+
+      if (pos.length === 1 && neg.length === 2) {
+        // One positive vertex (A), two negative vertices (B, C)
+        const A = pos[0];
+        const B = neg[0];
+        const C = neg[1];
+
+        const tAB = A.h / (A.h - B.h);
+        const tAC = A.h / (A.h - C.h);
+
+        const D = { x: A.x + tAB * (B.x - A.x), y: A.y + tAB * (B.y - A.y), h: 0 };
+        const E = { x: A.x + tAC * (C.x - A.x), y: A.y + tAC * (C.y - A.y), h: 0 };
+
+        const areaADE = tAB * tAC * area;
+        const vCut = areaADE * A.h / 3;
+        totalCutBank += vCut;
+
+        // Quadrilateral BCED split into two triangles (B-C-E and B-E-D)
+        const areaBCE = 0.5 * Math.abs((C.x - B.x) * (E.y - B.y) - (E.x - B.x) * (C.y - B.y));
+        const areaBED = 0.5 * Math.abs((E.x - B.x) * (D.y - B.y) - (D.x - B.x) * (E.y - B.y));
+
+        const vFillBCE = areaBCE * (Math.abs(B.h) + Math.abs(C.h) + 0) / 3;
+        const vFillBED = areaBED * (Math.abs(B.h) + 0 + 0) / 3;
+        totalFillGeom += (vFillBCE + vFillBED);
+
+      } else if (neg.length === 1 && pos.length === 2) {
+        // One negative vertex (A), two positive vertices (B, C)
+        const A = neg[0];
+        const B = pos[0];
+        const C = pos[1];
+
+        const tAB = Math.abs(A.h) / (Math.abs(A.h) + B.h);
+        const tAC = Math.abs(A.h) / (Math.abs(A.h) + C.h);
+
+        const D = { x: A.x + tAB * (B.x - A.x), y: A.y + tAB * (B.y - A.y), h: 0 };
+        const E = { x: A.x + tAC * (C.x - A.x), y: A.y + tAC * (C.y - A.y), h: 0 };
+
+        const areaADE = tAB * tAC * area;
+        const vFill = areaADE * Math.abs(A.h) / 3;
+        totalFillGeom += vFill;
+
+        // Quadrilateral BCED split into two triangles (B-C-E and B-E-D)
+        const areaBCE = 0.5 * Math.abs((C.x - B.x) * (E.y - B.y) - (E.x - B.x) * (C.y - B.y));
+        const areaBED = 0.5 * Math.abs((E.x - B.x) * (D.y - B.y) - (D.x - B.x) * (E.y - B.y));
+
+        const vCutBCE = areaBCE * (B.h + C.h + 0) / 3;
+        const vCutBED = areaBED * (B.h + 0 + 0) / 3;
+        totalCutBank += (vCutBCE + vCutBED);
+      }
+    }
+
+    // Fallback if no full triangles are measured yet: use grid prism method
+    if (measuredTrianglesCount === 0) {
+      return this.calculateEarthworkVolumes(stakes, settings);
+    }
+
+    const netBalance = totalCutBank - totalFillGeom;
+    const measuredStakesCount = stakes.filter(s => s.cutFill !== null && s.cutFill !== undefined).length;
+
+    return {
+      totalCutVolume: Math.round(totalCutBank * 100) / 100,
+      totalFillVolume: Math.round(totalFillGeom * 100) / 100,
+      netBalance: Math.round(netBalance * 100) / 100,
+      totalAreaMeasured: Math.round(totalAreaMeasured * 100) / 100,
+      measuredTrianglesCount,
+      totalTrianglesCount: triangles.length,
+      measuredCount: measuredStakesCount,
+      totalStakes: stakes.length,
+      coveragePercent: stakes.length > 0 ? Math.round((measuredStakesCount / stakes.length) * 100) : 0,
+      method: 'TIN Exacto con Subdivisión Cota Cero'
+    };
+  },
+
+  // Machinery Scheduling and Volumetric Breakdown (Colombia Earthmoving Standards)
+  calculateMachinerySchedule(volumeData, customParams = {}) {
+    const cutBank = volumeData.totalCutVolume || 0;
+    const fillGeom = volumeData.totalFillVolume || 0;
+
+    const esponjamientoPct = customParams.esponjamientoPct ?? 25; // Default 25% (tierra común/arcilla)
+    const compactacionPct = customParams.compactacionPct ?? 15;   // Default 15% (contracción de terraplén)
+    const rendimientoExcavadora = customParams.rendimientoExcavadora ?? 60; // Default 60 m3/h en banco
+    const horasJornal = customParams.horasJornal ?? 8; // Default 8 h/día
+    const capacidadVolqueta = customParams.capacidadDobleTroque ?? 14; // Default 14 m3 sueltos (Doble Troque)
+    const compensarRelleno = customParams.compensarRelleno ?? true;
+
+    // 1. Loose Cut Volume (Volumen de corte suelto a transportar)
+    const cutLooseTotal = cutBank * (1 + esponjamientoPct / 100);
+
+    // 2. Bank Cut needed to achieve compacted fill (Corte en banco requerido para rellenar)
+    const fillBankRequired = fillGeom * (1 + compactacionPct / 100);
+
+    // 3. Compensated On-Site Re-use vs Surplus
+    let bankUsedOnSite = 0;
+    let surplusBankToHaul = 0;
+    let deficitBankRequired = 0;
+
+    if (compensarRelleno) {
+      bankUsedOnSite = Math.min(cutBank, fillBankRequired);
+      surplusBankToHaul = Math.max(0, cutBank - fillBankRequired);
+      deficitBankRequired = Math.max(0, fillBankRequired - cutBank);
+    } else {
+      bankUsedOnSite = 0;
+      surplusBankToHaul = cutBank;
+      deficitBankRequired = fillBankRequired;
+    }
+
+    const surplusLooseToHaul = surplusBankToHaul * (1 + esponjamientoPct / 100);
+
+    // 4. Excavator Hours & Working Days
+    const excavatorHours = rendimientoExcavadora > 0 ? (cutBank / rendimientoExcavadora) : 0;
+    const excavatorDays = horasJornal > 0 ? (excavatorHours / horasJornal) : 0;
+
+    // 5. Dump Truck Trips (Viajes de Doble Troque de 14m3)
+    const tripsTotalCut = capacidadVolqueta > 0 ? Math.ceil(cutLooseTotal / capacidadVolqueta) : 0;
+    const tripsSurplusCompensated = capacidadVolqueta > 0 ? Math.ceil(surplusLooseToHaul / capacidadVolqueta) : 0;
+
+    return {
+      cutBank: Math.round(cutBank * 100) / 100,
+      fillGeom: Math.round(fillGeom * 100) / 100,
+      cutLooseTotal: Math.round(cutLooseTotal * 100) / 100,
+      fillBankRequired: Math.round(fillBankRequired * 100) / 100,
+      bankUsedOnSite: Math.round(bankUsedOnSite * 100) / 100,
+      surplusBankToHaul: Math.round(surplusBankToHaul * 100) / 100,
+      surplusLooseToHaul: Math.round(surplusLooseToHaul * 100) / 100,
+      deficitBankRequired: Math.round(deficitBankRequired * 100) / 100,
+      excavatorHours: Math.round(excavatorHours * 10) / 10,
+      excavatorDays: Math.round(excavatorDays * 10) / 10,
+      tripsTotalCut,
+      tripsSurplusCompensated,
+      params: {
+        esponjamientoPct,
+        compactacionPct,
+        rendimientoExcavadora,
+        horasJornal,
+        capacidadVolqueta,
+        compensarRelleno
+      }
+    };
   }
 };
 

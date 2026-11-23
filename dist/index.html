@@ -86,6 +86,10 @@
         <span class="tab-icon">📍</span>
         <span>Ptos Libres</span>
       </button>
+      <button class="tab-btn" data-tab="tab-machinery" role="tab">
+        <span class="tab-icon">🚜</span>
+        <span>Maquinaria</span>
+      </button>
       <button class="tab-btn" data-tab="tab-export" role="tab">
         <span class="tab-icon">📊</span>
         <span>Cartera & CSV</span>
@@ -202,40 +206,120 @@
             <h2 class="card-title">🐟 Geometría del Lago y Cuadrícula</h2>
           </div>
 
+          <!-- Selector de Modo de Replanteo -->
+          <div class="view-mode-bar" style="margin-bottom: 12px;">
+            <button id="cfg-mode-regular-btn" class="view-mode-btn active" type="button">
+              <span>📐 Malla Ortogonal Base</span>
+            </button>
+            <button id="cfg-mode-talud-btn" class="view-mode-btn" type="button">
+              <span>🚜 Replanteo por Taludes con Cinta</span>
+            </button>
+          </div>
+
           <div class="form-group">
             <label class="form-label" for="cfg-pond-name">Nombre del Lago / Piscina:</label>
             <input type="text" id="cfg-pond-name" class="form-control" value="Lago Piscícola 1 - Tilapia" placeholder="Ej. Lago Engorde 01">
           </div>
 
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label class="form-label" for="cfg-rows">Filas (Letras A, B...):</label>
-              <input type="number" id="cfg-rows" class="form-control" min="2" max="26" value="5">
-              <div class="form-help">Máx 26 filas (A..Z)</div>
+          <!-- SECCIÓN A: Malla Regular / Dimensiones Base -->
+          <div id="cfg-section-regular">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label" for="cfg-rows">Filas (Letras A, B...):</label>
+                <input type="number" id="cfg-rows" class="form-control" min="2" max="26" value="5">
+                <div class="form-help">Máx 26 filas (A..Z)</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="cfg-cols">Columnas Base (1, 2...):</label>
+                <input type="number" id="cfg-cols" class="form-control" min="2" max="50" value="8">
+                <div class="form-help">Ej. 8 columnas</div>
+              </div>
             </div>
+
             <div class="form-group">
-              <label class="form-label" for="cfg-cols">Columnas Base (1, 2...):</label>
-              <input type="number" id="cfg-cols" class="form-control" min="2" max="50" value="8">
-              <div class="form-help">Ej. 8 columnas</div>
+              <label class="form-label" for="cfg-row-pattern">Patrón de Estacas por Fila (Opcional - Lago Irregular):</label>
+              <input type="text" id="cfg-row-pattern" class="form-control" placeholder="Ej. 5, 7, 7, 7, 5" value="">
+              <div class="form-help">Dejar vacío para malla regular, o especificar cuántas estacas lleva cada fila (ej. A=5, B=7, C=7, D=7, E=5)</div>
+            </div>
+
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label" for="cfg-dx">Espaciado X (m):</label>
+                <input type="number" id="cfg-dx" class="form-control" step="0.5" min="1" value="10.0">
+                <div class="form-help">Distancia entre columnas</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="cfg-dy">Espaciado Y (m):</label>
+                <input type="number" id="cfg-dy" class="form-control" step="0.5" min="1" value="10.0">
+                <div class="form-help">Distancia entre filas</div>
+              </div>
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="cfg-row-pattern">Patrón de Estacas por Fila (Opcional - Lago Irregular):</label>
-            <input type="text" id="cfg-row-pattern" class="form-control" placeholder="Ej. 5, 7, 7, 7, 5" value="">
-            <div class="form-help">Dejar vacío para malla regular, o especificar cuántas estacas lleva cada fila (ej. A=5, B=7, C=7, D=7, E=5)</div>
-          </div>
-
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label class="form-label" for="cfg-dx">Espaciado X (m):</label>
-              <input type="number" id="cfg-dx" class="form-control" step="0.5" min="1" value="10.0">
-              <div class="form-help">Distancia entre columnas</div>
+          <!-- SECCIÓN B: Malla Paralela a Taludes Reales con Cinta -->
+          <div id="cfg-section-talud" style="display: none;">
+            <div class="alert-box alert-warning" style="margin-bottom: 10px; font-size: 0.82rem;">
+              <span>📐</span>
+              <div>
+                <strong>Modo Replanteo con Cinta en Campo:</strong>
+                Define los tramos medidos a lo largo de los dos taludes principales y el ángulo real medido con diagonal. La malla interior se proyecta automáticamente paralela a ambos bordes.
+              </div>
             </div>
+
+            <!-- Paso A: Borde a lo largo -->
             <div class="form-group">
-              <label class="form-label" for="cfg-dy">Espaciado Y (m):</label>
-              <input type="number" id="cfg-dy" class="form-control" step="0.5" min="1" value="10.0">
-              <div class="form-help">Distancia entre filas</div>
+              <label class="form-label" for="talud-long-sections">
+                📏 Paso A: Tramos en Talud a lo Largo (m):
+              </label>
+              <input type="text" id="talud-long-sections" class="form-control" value="10, 10, 10, 6.5" placeholder="Ej. 10, 10, 10, 6.5">
+              <div class="form-help">Separados por coma. El último tramo puede achicarse (ej. 6.5 m).</div>
+            </div>
+
+            <!-- Paso B: Borde a lo ancho -->
+            <div class="form-group">
+              <label class="form-label" for="talud-width-sections">
+                📏 Paso B: Tramos en Talud a lo Ancho (m):
+              </label>
+              <input type="text" id="talud-width-sections" class="form-control" value="10, 10, 8.2" placeholder="Ej. 10, 10, 8.2">
+              <div class="form-help">Separados por coma para definir las filas a lo ancho.</div>
+            </div>
+
+            <!-- Paso C: Ángulo real entre taludes -->
+            <div class="card" style="padding: 10px; background-color: var(--bg-surface); margin-bottom: 8px;">
+              <label class="form-label" style="font-size: 0.88rem; color: #b45309;">
+                📐 Paso C: Ángulo Real entre Taludes:
+              </label>
+              
+              <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                <button id="talud-btn-angle-90" class="btn btn-outline" style="min-height: 36px; padding: 4px 10px; font-size: 0.8rem;" type="button">
+                  Escuadra 90°
+                </button>
+                <button id="talud-btn-angle-diag" class="btn btn-primary" style="min-height: 36px; padding: 4px 10px; font-size: 0.8rem;" type="button">
+                  Medir Diagonal con Cinta
+                </button>
+              </div>
+
+              <div id="talud-diagonal-inputs" class="form-grid-3" style="margin-bottom: 6px;">
+                <div>
+                  <label class="form-label" for="talud-diag-a" style="font-size: 0.75rem;">Dist Borde Largo (a):</label>
+                  <input type="number" id="talud-diag-a" class="form-control" step="0.1" value="10.0" style="min-height: 38px;">
+                </div>
+                <div>
+                  <label class="form-label" for="talud-diag-b" style="font-size: 0.75rem;">Dist Borde Ancho (b):</label>
+                  <input type="number" id="talud-diag-b" class="form-control" step="0.1" value="10.0" style="min-height: 38px;">
+                </div>
+                <div>
+                  <label class="form-label" for="talud-diag-c" style="font-size: 0.75rem;">Diagonal Cinta (c):</label>
+                  <input type="number" id="talud-diag-c" class="form-control" step="0.05" value="14.14" style="min-height: 38px;">
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.8rem; font-weight: 700;">Ángulo Calculado (Ley de Cosenos):</span>
+                <span id="talud-angle-badge" class="badge-offline" style="background:#0284c7; font-size: 0.95rem; font-family: var(--font-mono);">
+                  90.0°
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -468,7 +552,144 @@
       </section>
 
       <!-- ==========================================
-           TAB 5: CARTERA DE CAMPO, DRENAJE Y CSV
+           TAB: CUBICACIÓN EXACTA Y MAQUINARIA (EXCAVADORA Y DOBLE TROQUE)
+           ========================================== -->
+      <section id="tab-machinery" class="tab-pane">
+        
+        <!-- Tarjetas de Resumen Volumétrico TIN -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">🚜 Cubicación Exacta por Triángulos (TIN)</h2>
+            <span id="mach-tin-method-badge" class="badge-offline" style="background:#0284c7; font-size:0.75rem;">Subdivisión Cota Cero</span>
+          </div>
+
+          <div class="summary-grid">
+            <div class="summary-card" style="border-color:#64748b;">
+              <div class="summary-label">Área Medida</div>
+              <div class="summary-value" id="mach-area-val">0 m²</div>
+              <small id="mach-triangles-count">0 triángulos</small>
+            </div>
+            <div class="summary-card corte">
+              <div class="summary-label">Corte en Banco</div>
+              <div class="summary-value" id="mach-cut-bank-val">0.00 m³</div>
+              <small>Volumen puro a excavar</small>
+            </div>
+            <div class="summary-card relleno">
+              <div class="summary-label">Relleno Geométrico</div>
+              <div class="summary-value" id="mach-fill-geom-val">0.00 m³</div>
+              <small>Hueco neto a rellenar</small>
+            </div>
+            <div class="summary-card balance">
+              <div class="summary-label">Balance Neto</div>
+              <div class="summary-value" id="mach-balance-val">0.00 m³</div>
+              <small id="mach-balance-status">Equilibrado</small>
+            </div>
+          </div>
+
+          <!-- Interruptor de Compensación -->
+          <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-main); padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--border-strong); margin-top: 6px;">
+            <label for="mach-compensate-toggle" style="font-size: 0.88rem; font-weight: 800; cursor: pointer;">
+              🔄 Compensar relleno con material del mismo corte
+            </label>
+            <input type="checkbox" id="mach-compensate-toggle" checked style="width: 22px; height: 22px; cursor: pointer;">
+          </div>
+        </div>
+
+        <!-- Parámetros de Maquinaria Pesada para Colombia -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">⚙️ Parámetros de Maquinaria (Estándar Colombia)</h2>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="mach-esponjamiento">Factor de Esponjamiento (%):</label>
+              <input type="number" id="mach-esponjamiento" class="form-control" min="0" max="100" value="25" step="1">
+              <div class="form-help">Default: 25% (convierte m³ banco a m³ sueltos para acarreo)</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="mach-compactacion">Factor de Compactación (%):</label>
+              <input type="number" id="mach-compactacion" class="form-control" min="0" max="100" value="15" step="1">
+              <div class="form-help">Default: 15% (corte en banco necesario para 1 m³ compactado)</div>
+            </div>
+          </div>
+
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label" for="mach-excavator-yield" style="font-size: 0.78rem;">Rendimiento Excavadora:</label>
+              <input type="number" id="mach-excavator-yield" class="form-control" min="10" max="300" value="60" step="5">
+              <div class="form-help">m³/h en banco (CAT 320 / PC200)</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="mach-hours-per-day" style="font-size: 0.78rem;">Horas por Jornal:</label>
+              <input type="number" id="mach-hours-per-day" class="form-control" min="4" max="24" value="8" step="1">
+              <div class="form-help">Horas/día de trabajo</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="mach-truck-cap" style="font-size: 0.78rem;">Capacidad Doble Troque:</label>
+              <input type="number" id="mach-truck-cap" class="form-control" min="5" max="35" value="14" step="1">
+              <div class="form-help">m³ sueltos por viaje</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarjetas de Programación de Maquinaria y Viajes -->
+        <div class="card" style="border-color: #0284c7; background: #f0f9ff;">
+          <div class="card-header" style="border-bottom-color: #bae6fd;">
+            <h2 class="card-title" style="color: #0369a1;">🚜 Programación de Excavadora y Volqueta Doble Troque</h2>
+          </div>
+
+          <!-- Excavadora -->
+          <div class="mach-box-inner" style="background: #ffffff; border: 2px solid #0284c7; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <span style="font-weight: 800; font-size: 1rem; color: #0c4a6e;">🏗️ Excavadora de Oruga</span>
+              <span style="font-size: 0.8rem; font-weight: 700; color: #0284c7;" id="mach-exc-yield-label">@ 60 m³/h</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+              <div>
+                <div style="font-size: 0.75rem; color: #64748b; font-weight: 700;">Horas de Máquina:</div>
+                <div style="font-family: var(--font-mono); font-size: 1.8rem; font-weight: 900; color: #0f172a;" id="mach-exc-hours">0.0 h</div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: #64748b; font-weight: 700;">Jornales Estimados:</div>
+                <div style="font-family: var(--font-mono); font-size: 1.8rem; font-weight: 900; color: #0284c7;" id="mach-exc-days">0.0 días</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Volqueta Doble Troque -->
+          <div class="mach-box-inner" style="background: #ffffff; border: 2px solid #0284c7; border-radius: 10px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <span style="font-weight: 800; font-size: 1rem; color: #0c4a6e;">🚛 Volquetas Doble Troque</span>
+              <span style="font-size: 0.8rem; font-weight: 700; color: #0284c7;" id="mach-truck-cap-label">14 m³ sueltos</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+              <div class="mach-subcard-total" style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 8px;">
+                <div style="font-size: 0.75rem; color: #dc2626; font-weight: 800;">Botando Todo el Corte:</div>
+                <div style="font-family: var(--font-mono); font-size: 1.8rem; font-weight: 900; color: #dc2626;" id="mach-trips-total">0 viajes</div>
+                <small style="font-size: 0.72rem; color: #64748b;" id="mach-loose-total-desc">Vol. Suelto: 0.0 m³</small>
+              </div>
+
+              <div class="mach-subcard-surplus" style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 8px;">
+                <div style="font-size: 0.75rem; color: #16a34a; font-weight: 800;">Solo Excedente (Compensado):</div>
+                <div style="font-family: var(--font-mono); font-size: 1.8rem; font-weight: 900; color: #16a34a;" id="mach-trips-surplus">0 viajes</div>
+                <small style="font-size: 0.72rem; color: #64748b;" id="mach-loose-surplus-desc">Excedente Suelto: 0.0 m³</small>
+              </div>
+            </div>
+
+            <!-- Detalle de aprovechamiento en sitio -->
+            <div style="font-size: 0.78rem; font-weight: 700; margin-top: 8px; color: #334155; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
+              <div>♻️ Tierra de corte reutilizada en relleno: <strong id="mach-bank-used" style="font-family: var(--font-mono);">0.00 m³</strong> banco</div>
+              <div id="mach-deficit-row" style="color: #ea580c; display: none;">⚠️ Falta material para relleno (Préstamo requerido): <strong id="mach-bank-deficit" style="font-family: var(--font-mono);">0.00 m³</strong> banco</div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==========================================
+           TAB 6: CARTERA & CSV
            ========================================== -->
       <section id="tab-export" class="tab-pane">
         

@@ -19,6 +19,8 @@
     earthworkSummary: null,
     activeViewMode: '2d', // '2d' | 'table'
     isEditMode: false,
+    configMode: 'regular', // 'regular' | 'talud'
+    taludAngleDeg: 90,
     canvas: {
       panX: 60,
       panY: 60,
@@ -74,6 +76,19 @@
 
     // Tab Configuración
     dom.cfgPondName = document.getElementById('cfg-pond-name');
+    dom.cfgModeRegularBtn = document.getElementById('cfg-mode-regular-btn');
+    dom.cfgModeTaludBtn = document.getElementById('cfg-mode-talud-btn');
+    dom.cfgSectionRegular = document.getElementById('cfg-section-regular');
+    dom.cfgSectionTalud = document.getElementById('cfg-section-talud');
+    dom.taludLongSections = document.getElementById('talud-long-sections');
+    dom.taludWidthSections = document.getElementById('talud-width-sections');
+    dom.taludBtnAngle90 = document.getElementById('talud-btn-angle-90');
+    dom.taludBtnAngleDiag = document.getElementById('talud-btn-angle-diag');
+    dom.taludDiagonalInputs = document.getElementById('talud-diagonal-inputs');
+    dom.taludDiagA = document.getElementById('talud-diag-a');
+    dom.taludDiagB = document.getElementById('talud-diag-b');
+    dom.taludDiagC = document.getElementById('talud-diag-c');
+    dom.taludAngleBadge = document.getElementById('talud-angle-badge');
     dom.cfgRows = document.getElementById('cfg-rows');
     dom.cfgCols = document.getElementById('cfg-cols');
     dom.cfgRowPattern = document.getElementById('cfg-row-pattern');
@@ -107,6 +122,32 @@
     dom.auxNote = document.getElementById('aux-note');
     dom.btnSaveAuxPoint = document.getElementById('btn-save-aux-point');
     dom.auxTableBody = document.getElementById('aux-table-body');
+
+    // Tab Maquinaria y Cubicación TIN
+    dom.machTinMethodBadge = document.getElementById('mach-tin-method-badge');
+    dom.machAreaVal = document.getElementById('mach-area-val');
+    dom.machTrianglesCount = document.getElementById('mach-triangles-count');
+    dom.machCutBankVal = document.getElementById('mach-cut-bank-val');
+    dom.machFillGeomVal = document.getElementById('mach-fill-geom-val');
+    dom.machBalanceVal = document.getElementById('mach-balance-val');
+    dom.machBalanceStatus = document.getElementById('mach-balance-status');
+    dom.machCompensateToggle = document.getElementById('mach-compensate-toggle');
+    dom.machEsponjamiento = document.getElementById('mach-esponjamiento');
+    dom.machCompactacion = document.getElementById('mach-compactacion');
+    dom.machExcavatorYield = document.getElementById('mach-excavator-yield');
+    dom.machHoursPerDay = document.getElementById('mach-hours-per-day');
+    dom.machTruckCap = document.getElementById('mach-truck-cap');
+    dom.machExcYieldLabel = document.getElementById('mach-exc-yield-label');
+    dom.machExcHours = document.getElementById('mach-exc-hours');
+    dom.machExcDays = document.getElementById('mach-exc-days');
+    dom.machTruckCapLabel = document.getElementById('mach-truck-cap-label');
+    dom.machTripsTotal = document.getElementById('mach-trips-total');
+    dom.machLooseTotalDesc = document.getElementById('mach-loose-total-desc');
+    dom.machTripsSurplus = document.getElementById('mach-trips-surplus');
+    dom.machLooseSurplusDesc = document.getElementById('mach-loose-surplus-desc');
+    dom.machBankUsed = document.getElementById('mach-bank-used');
+    dom.machDeficitRow = document.getElementById('mach-deficit-row');
+    dom.machBankDeficit = document.getElementById('mach-bank-deficit');
 
     // Tab Cartera & CSV
     dom.sumCutVol = document.getElementById('sum-cut-vol');
@@ -936,11 +977,93 @@
     dom.cfgSlopeRadial.value = s.slopeRadial ?? 0.60;
     dom.cfgTolerance.value = s.toleranceCm ?? 2.0;
 
+    // Configuración de modo de replanteo (Regular vs Taludes)
+    if (s.meshMode === 'talud') {
+      setConfigMode('talud');
+      if (s.taludLongSections) dom.taludLongSections.value = s.taludLongSections;
+      if (s.taludWidthSections) dom.taludWidthSections.value = s.taludWidthSections;
+      if (s.taludAngleDeg !== undefined) {
+        state.taludAngleDeg = s.taludAngleDeg;
+        if (Math.abs(s.taludAngleDeg - 90) < 0.1) {
+          selectTaludAngleMode('90');
+        } else {
+          selectTaludAngleMode('diag');
+        }
+      }
+    } else {
+      setConfigMode('regular');
+    }
+
     // Actualizar selects de fila y columna de la caja
     updateBoxSelectOptions(s.rows, s.cols, s.boxRow, s.boxCol);
 
     // Visibilidad de campos según modo de pendiente
     updateSlopeModeFields(s.slopeMode);
+  }
+
+  function setConfigMode(mode) {
+    state.configMode = mode;
+    if (mode === 'regular') {
+      if (dom.cfgModeRegularBtn) dom.cfgModeRegularBtn.classList.add('active');
+      if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.classList.remove('active');
+      if (dom.cfgSectionRegular) dom.cfgSectionRegular.style.display = 'block';
+      if (dom.cfgSectionTalud) dom.cfgSectionTalud.style.display = 'none';
+    } else {
+      if (dom.cfgModeRegularBtn) dom.cfgModeRegularBtn.classList.remove('active');
+      if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.classList.add('active');
+      if (dom.cfgSectionRegular) dom.cfgSectionRegular.style.display = 'none';
+      if (dom.cfgSectionTalud) dom.cfgSectionTalud.style.display = 'block';
+    }
+  }
+
+  function selectTaludAngleMode(mode) {
+    if (mode === '90') {
+      if (dom.taludBtnAngle90) {
+        dom.taludBtnAngle90.classList.remove('btn-outline');
+        dom.taludBtnAngle90.classList.add('btn-primary');
+      }
+      if (dom.taludBtnAngleDiag) {
+        dom.taludBtnAngleDiag.classList.remove('btn-primary');
+        dom.taludBtnAngleDiag.classList.add('btn-outline');
+      }
+      if (dom.taludDiagonalInputs) dom.taludDiagonalInputs.style.display = 'none';
+      state.taludAngleDeg = 90;
+      if (dom.taludAngleBadge) {
+        dom.taludAngleBadge.textContent = '90.0° (Escuadra ~90°)';
+        dom.taludAngleBadge.style.background = '#0284c7';
+      }
+    } else {
+      if (dom.taludBtnAngleDiag) {
+        dom.taludBtnAngleDiag.classList.remove('btn-outline');
+        dom.taludBtnAngleDiag.classList.add('btn-primary');
+      }
+      if (dom.taludBtnAngle90) {
+        dom.taludBtnAngle90.classList.remove('btn-primary');
+        dom.taludBtnAngle90.classList.add('btn-outline');
+      }
+      if (dom.taludDiagonalInputs) dom.taludDiagonalInputs.style.display = 'grid';
+      updateTaludAngleFromDiagonal();
+    }
+  }
+
+  function updateTaludAngleFromDiagonal() {
+    if (!dom.taludDiagA || !dom.taludDiagB || !dom.taludDiagC) return;
+    const a = parseFloat(dom.taludDiagA.value);
+    const b = parseFloat(dom.taludDiagB.value);
+    const c = parseFloat(dom.taludDiagC.value);
+    const res = window.TopoMath.solveLawOfCosinesAngle(a, b, c);
+    if (res.success) {
+      state.taludAngleDeg = res.angleDeg;
+      if (dom.taludAngleBadge) {
+        dom.taludAngleBadge.textContent = res.description;
+        dom.taludAngleBadge.style.background = '#0284c7';
+      }
+    } else {
+      if (dom.taludAngleBadge) {
+        dom.taludAngleBadge.textContent = 'Error: ' + res.error;
+        dom.taludAngleBadge.style.background = '#dc2626';
+      }
+    }
   }
 
   function updateBoxSelectOptions(rows, cols, selectedRow, selectedCol) {
@@ -1007,7 +1130,7 @@
     s.toleranceCm = newTolerance;
     state.project.name = newName;
 
-    // Reconstruir o actualizar malla de estacas (regular o con patrón)
+    // Reconstruir o actualizar malla de estacas (regular o con patrón o paralela a taludes)
     const existingStakesMap = new Map();
     state.stakes.forEach(st => {
       existingStakesMap.set(st.code, st);
@@ -1015,35 +1138,57 @@
     });
 
     let rawStakes;
-    if (newRowPattern) {
-      rawStakes = window.TopoMath.generateStakes(state.project.id, s);
+    if (state.configMode === 'talud') {
+      const taludRes = window.TopoMath.generateTaludMesh(
+        dom.taludLongSections.value,
+        dom.taludWidthSections.value,
+        state.taludAngleDeg,
+        s,
+        state.project.id
+      );
+      rawStakes = taludRes.stakes;
+      s.meshMode = 'talud';
+      s.rows = taludRes.numRows;
+      s.cols = taludRes.numCols;
+      s.taludLongSections = dom.taludLongSections.value;
+      s.taludWidthSections = dom.taludWidthSections.value;
+      s.taludAngleDeg = state.taludAngleDeg;
+
+      // Asegurar que la caja quede dentro del rango de filas y columnas
+      if (s.boxRow >= s.rows) s.boxRow = 0;
+      if (s.boxCol >= s.cols) s.boxCol = 0;
     } else {
-      rawStakes = [];
-      for (let r = 0; r < newRows; r++) {
-        for (let c = 0; c < newCols; c++) {
-          const code = window.TopoMath.getStakeCode(r, c);
-          const x = c * newDx;
-          const y = r * newDy;
-          rawStakes.push({
-            id: `${state.project.id}_${r}_${c}`,
-            projId: state.project.id,
-            row: r,
-            col: c,
-            code: code,
-            x: x,
-            y: y,
-            designElevation: 0,
-            isCustomDesign: false,
-            reading: null,
-            measuredElevation: null,
-            stationId: null,
-            measuredAt: null,
-            cutFill: null,
-            status: 'PENDIENTE',
-            hasPuddleWarning: false,
-            puddleReason: null,
-            note: ''
-          });
+      s.meshMode = 'regular';
+      if (newRowPattern) {
+        rawStakes = window.TopoMath.generateStakes(state.project.id, s);
+      } else {
+        rawStakes = [];
+        for (let r = 0; r < newRows; r++) {
+          for (let c = 0; c < newCols; c++) {
+            const code = window.TopoMath.getStakeCode(r, c);
+            const x = c * newDx;
+            const y = r * newDy;
+            rawStakes.push({
+              id: `${state.project.id}_${r}_${c}`,
+              projId: state.project.id,
+              row: r,
+              col: c,
+              code: code,
+              x: x,
+              y: y,
+              designElevation: 0,
+              isCustomDesign: false,
+              reading: null,
+              measuredElevation: null,
+              stationId: null,
+              measuredAt: null,
+              cutFill: null,
+              status: 'PENDIENTE',
+              hasPuddleWarning: false,
+              puddleReason: null,
+              note: ''
+            });
+          }
         }
       }
     }
@@ -1056,8 +1201,10 @@
       let realY = st.y;
 
       if (existing) {
-        realX = existing.x ?? st.x;
-        realY = existing.y ?? st.y;
+        if (state.configMode !== 'talud') {
+          realX = existing.x ?? st.x;
+          realY = existing.y ?? st.y;
+        }
         if (existing.isCustomDesign) {
           designElev = existing.designElevation;
           isCustom = true;
@@ -1361,6 +1508,84 @@
     }
   };
 
+  // --- PESTAÑA CUBICACIÓN EXACTA TIN Y MAQUINARIA PESADA ---
+  function renderMachineryTab() {
+    if (!state.project || !state.stakes) return;
+
+    // Calcular o reutilizar TIN Delaunay
+    const tin = state.canvas.tinData || window.TopoMath.computeDelaunayTIN(state.stakes);
+    state.canvas.tinData = tin;
+
+    const s = state.project.settings;
+    const tinVolumes = window.TopoMath.calculateExactTINVolumes(state.stakes, tin ? tin.triangles : [], s);
+
+    // Parámetros de maquinaria
+    const esponjamiento = parseFloat(dom.machEsponjamiento ? dom.machEsponjamiento.value : 25) || 25;
+    const compactacion = parseFloat(dom.machCompactacion ? dom.machCompactacion.value : 15) || 15;
+    const rendimientoExcavadora = parseFloat(dom.machExcavatorYield ? dom.machExcavatorYield.value : 60) || 60;
+    const horasJornal = parseFloat(dom.machHoursPerDay ? dom.machHoursPerDay.value : 8) || 8;
+    const capacidadVolqueta = parseFloat(dom.machTruckCap ? dom.machTruckCap.value : 14) || 14;
+    const compensarRelleno = dom.machCompensateToggle ? dom.machCompensateToggle.checked : true;
+
+    const machSchedule = window.TopoMath.calculateMachinerySchedule(tinVolumes, {
+      esponjamientoPct: esponjamiento,
+      compactacionPct: compactacion,
+      rendimientoExcavadora: rendimientoExcavadora,
+      horasJornal: horasJornal,
+      capacidadDobleTroque: capacidadVolqueta,
+      compensarRelleno: compensarRelleno
+    });
+
+    if (dom.machTinMethodBadge) {
+      dom.machTinMethodBadge.textContent = tinVolumes.method || 'Subdivisión Cota Cero';
+    }
+
+    if (dom.machAreaVal) dom.machAreaVal.textContent = `${tinVolumes.totalAreaMeasured.toFixed(1)} m²`;
+    if (dom.machTrianglesCount) {
+      dom.machTrianglesCount.textContent = `${tinVolumes.measuredTrianglesCount} de ${tinVolumes.totalTrianglesCount || 0} triángulos`;
+    }
+
+    if (dom.machCutBankVal) dom.machCutBankVal.textContent = `${tinVolumes.totalCutVolume.toFixed(2)} m³`;
+    if (dom.machFillGeomVal) dom.machFillGeomVal.textContent = `${tinVolumes.totalFillVolume.toFixed(2)} m³`;
+    if (dom.machBalanceVal) dom.machBalanceVal.textContent = `${tinVolumes.netBalance > 0 ? '+' : ''}${tinVolumes.netBalance.toFixed(2)} m³`;
+
+    if (dom.machBalanceStatus) {
+      if (tinVolumes.netBalance > 2) {
+        dom.machBalanceStatus.textContent = 'Excedente (Sobra tierra)';
+        dom.machBalanceStatus.style.color = '#dc2626';
+      } else if (tinVolumes.netBalance < -2) {
+        dom.machBalanceStatus.textContent = 'Déficit (Falta tierra)';
+        dom.machBalanceStatus.style.color = '#0284c7';
+      } else {
+        dom.machBalanceStatus.textContent = 'Equilibrado en cota rasante';
+        dom.machBalanceStatus.style.color = '#16a34a';
+      }
+    }
+
+    // Excavadora
+    if (dom.machExcYieldLabel) dom.machExcYieldLabel.textContent = `@ ${rendimientoExcavadora} m³/h en banco`;
+    if (dom.machExcHours) dom.machExcHours.textContent = `${machSchedule.excavatorHours.toFixed(1)} h`;
+    if (dom.machExcDays) dom.machExcDays.textContent = `${machSchedule.excavatorDays.toFixed(1)} días`;
+
+    // Volqueta
+    if (dom.machTruckCapLabel) dom.machTruckCapLabel.textContent = `${capacidadVolqueta} m³ sueltos`;
+    if (dom.machTripsTotal) dom.machTripsTotal.textContent = `${machSchedule.tripsTotalCut} viajes`;
+    if (dom.machLooseTotalDesc) dom.machLooseTotalDesc.textContent = `Vol. Suelto Total: ${machSchedule.cutLooseTotal.toFixed(1)} m³`;
+    if (dom.machTripsSurplus) dom.machTripsSurplus.textContent = `${machSchedule.tripsSurplusCompensated} viajes`;
+    if (dom.machLooseSurplusDesc) dom.machLooseSurplusDesc.textContent = `Excedente Suelto: ${machSchedule.surplusLooseToHaul.toFixed(1)} m³`;
+
+    // Reutilización y préstamo
+    if (dom.machBankUsed) dom.machBankUsed.textContent = `${machSchedule.bankUsedOnSite.toFixed(2)} m³`;
+    if (dom.machDeficitRow) {
+      if (machSchedule.deficitBankRequired > 0.05) {
+        dom.machDeficitRow.style.display = 'block';
+        if (dom.machBankDeficit) dom.machBankDeficit.textContent = `${machSchedule.deficitBankRequired.toFixed(2)} m³`;
+      } else {
+        dom.machDeficitRow.style.display = 'none';
+      }
+    }
+  }
+
   // --- 7. PESTAÑA CARTERA TOPOGRÁFICA Y EXPORTACIÓN ---
   function renderExportTab() {
     if (!state.project || !state.stakes) return;
@@ -1458,13 +1683,57 @@
       csv += `\n`;
     }
 
-    // Sección 4: Resumen de Movimiento de Tierras
-    const sum = state.earthworkSummary;
+    // Sección 4: Resumen de Movimiento de Tierras (Prismas)
+    const sum = state.earthworkSummary || window.TopoMath.calculateEarthworkVolumes(state.stakes, state.project.settings);
     csv += `--- RESUMEN ESTIMADO DE MOVIMIENTO DE TIERRAS (MÉTODO PRISMAS) ---\n`;
     csv += `Volumen Total de Corte${sep}${fmtNum(sum.totalCutVolume, 2)} m³\n`;
     csv += `Volumen Total de Relleno${sep}${fmtNum(sum.totalFillVolume, 2)} m³\n`;
     csv += `Balance Neto de Tierra${sep}${fmtNum(sum.netBalance, 2)} m³\n`;
-    csv += `Estacas Medidas${sep}${sum.measuredCount} de ${sum.totalStakes} (${sum.coveragePercent}%)\n`;
+    csv += `Estacas Medidas${sep}${sum.measuredCount} de ${sum.totalStakes} (${sum.coveragePercent}%)\n\n`;
+
+    // Sección 5: Cubicación Exacta TIN y Programación de Maquinaria Pesada (Estándar Colombia)
+    const tin = state.canvas.tinData || window.TopoMath.computeDelaunayTIN(state.stakes);
+    const tinVolumes = window.TopoMath.calculateExactTINVolumes(state.stakes, tin ? tin.triangles : [], state.project.settings);
+    const esponjamiento = parseFloat(dom.machEsponjamiento ? dom.machEsponjamiento.value : 25) || 25;
+    const compactacion = parseFloat(dom.machCompactacion ? dom.machCompactacion.value : 15) || 15;
+    const rendimientoExcavadora = parseFloat(dom.machExcavatorYield ? dom.machExcavatorYield.value : 60) || 60;
+    const horasJornal = parseFloat(dom.machHoursPerDay ? dom.machHoursPerDay.value : 8) || 8;
+    const capacidadVolqueta = parseFloat(dom.machTruckCap ? dom.machTruckCap.value : 14) || 14;
+    const compensarRelleno = dom.machCompensateToggle ? dom.machCompensateToggle.checked : true;
+
+    const machSchedule = window.TopoMath.calculateMachinerySchedule(tinVolumes, {
+      esponjamientoPct: esponjamiento,
+      compactacionPct: compactacion,
+      rendimientoExcavadora: rendimientoExcavadora,
+      horasJornal: horasJornal,
+      capacidadDobleTroque: capacidadVolqueta,
+      compensarRelleno: compensarRelleno
+    });
+
+    csv += `--- CUBICACIÓN EXACTA TIN Y PROGRAMACIÓN DE MAQUINARIA (COLOMBIA) ---\n`;
+    csv += `Método de Cubicación${sep}${tinVolumes.method || 'TIN Exacto con Subdivisión Cota Cero'}\n`;
+    csv += `Área Malla Medida${sep}${fmtNum(tinVolumes.totalAreaMeasured, 2)} m²\n`;
+    csv += `Triángulos Medidos${sep}${tinVolumes.measuredTrianglesCount} de ${tinVolumes.totalTrianglesCount || 0}\n`;
+    csv += `Corte Puro en Banco${sep}${fmtNum(tinVolumes.totalCutVolume, 2)} m³\n`;
+    csv += `Relleno Puro Geométrico${sep}${fmtNum(tinVolumes.totalFillVolume, 2)} m³\n`;
+    csv += `Balance Neto de Tierra${sep}${fmtNum(tinVolumes.netBalance, 2)} m³\n`;
+    csv += `Factor de Esponjamiento${sep}${esponjamiento} %\n`;
+    csv += `Volumen de Corte Suelto Total${sep}${fmtNum(machSchedule.cutLooseTotal, 2)} m³\n`;
+    csv += `Factor de Compactación${sep}${compactacion} %\n`;
+    csv += `Corte en Banco Requerido para Relleno${sep}${fmtNum(machSchedule.fillBankRequired, 2)} m³\n`;
+    csv += `Compensación de Relleno en Sitio${sep}${compensarRelleno ? 'ACTIVADA' : 'DESACTIVADA'}\n`;
+    csv += `Tierra Reutilizada en Sitio${sep}${fmtNum(machSchedule.bankUsedOnSite, 2)} m³ banco\n`;
+    csv += `Excedente en Banco a Retirar${sep}${fmtNum(machSchedule.surplusBankToHaul, 2)} m³ banco\n`;
+    csv += `Excedente Suelto a Retirar${sep}${fmtNum(machSchedule.surplusLooseToHaul, 2)} m³ sueltos\n`;
+    if (machSchedule.deficitBankRequired > 0.05) {
+      csv += `Déficit de Material (Préstamo Requerido)${sep}${fmtNum(machSchedule.deficitBankRequired, 2)} m³ banco\n`;
+    }
+    csv += `Rendimiento Excavadora CAT/Komatsu${sep}${rendimientoExcavadora} m³/h en banco\n`;
+    csv += `Horas de Excavadora Estimadas${sep}${fmtNum(machSchedule.excavatorHours, 1)} horas\n`;
+    csv += `Jornales de Excavadora (${horasJornal}h/día)${sep}${fmtNum(machSchedule.excavatorDays, 1)} días\n`;
+    csv += `Capacidad Volqueta Doble Troque${sep}${capacidadVolqueta} m³ sueltos\n`;
+    csv += `Viajes Doble Troque (Botando todo el corte)${sep}${machSchedule.tripsTotalCut} viajes\n`;
+    csv += `Viajes Doble Troque (Solo excedente compensado)${sep}${machSchedule.tripsSurplusCompensated} viajes\n`;
 
     // Descargar archivo Blob
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1601,7 +1870,9 @@
 
     if (targetId === 'tab-grid') renderGridTab();
     else if (targetId === 'tab-station') renderStationTab();
+    else if (targetId === 'tab-config') renderConfigTab();
     else if (targetId === 'tab-aux') renderAuxTab();
+    else if (targetId === 'tab-machinery') renderMachineryTab();
     else if (targetId === 'tab-export') renderExportTab();
   }
 
@@ -1716,6 +1987,23 @@
       updateSlopeModeFields(dom.cfgSlopeMode.value);
     });
     dom.btnSaveConfig.addEventListener('click', savePondConfig);
+
+    // Modo de Replanteo (Malla Regular vs Taludes con Cinta)
+    if (dom.cfgModeRegularBtn) dom.cfgModeRegularBtn.addEventListener('click', () => setConfigMode('regular'));
+    if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.addEventListener('click', () => setConfigMode('talud'));
+    if (dom.taludBtnAngle90) dom.taludBtnAngle90.addEventListener('click', () => selectTaludAngleMode('90'));
+    if (dom.taludBtnAngleDiag) dom.taludBtnAngleDiag.addEventListener('click', () => selectTaludAngleMode('diag'));
+    if (dom.taludDiagA) dom.taludDiagA.addEventListener('input', updateTaludAngleFromDiagonal);
+    if (dom.taludDiagB) dom.taludDiagB.addEventListener('input', updateTaludAngleFromDiagonal);
+    if (dom.taludDiagC) dom.taludDiagC.addEventListener('input', updateTaludAngleFromDiagonal);
+
+    // Pestaña Maquinaria y Cubicación TIN
+    if (dom.machCompensateToggle) dom.machCompensateToggle.addEventListener('change', renderMachineryTab);
+    if (dom.machEsponjamiento) dom.machEsponjamiento.addEventListener('input', renderMachineryTab);
+    if (dom.machCompactacion) dom.machCompactacion.addEventListener('input', renderMachineryTab);
+    if (dom.machExcavatorYield) dom.machExcavatorYield.addEventListener('input', renderMachineryTab);
+    if (dom.machHoursPerDay) dom.machHoursPerDay.addEventListener('input', renderMachineryTab);
+    if (dom.machTruckCap) dom.machTruckCap.addEventListener('input', renderMachineryTab);
 
     // Station tab
     dom.stBmElev.addEventListener('input', updateStationCalculationPreview);

@@ -878,25 +878,84 @@ const TopoMath = {
     };
   },
 
-  // Machinery Scheduling and Volumetric Breakdown (Colombia Earthmoving Standards)
+  // Presets de Suelo para Nivelación de Lagos (Valores calibrados para excavación real)
+  SOIL_PRESETS: {
+    mixto: {
+      id: 'mixto',
+      name: 'Mixto: Peñón + Arcilla Pesada',
+      factorLlenadoK: 0.72,
+      tiempoCicloSeg: 24,
+      esponjamientoPct: 35,
+      contraccionPct: 12,
+      badge: 'Peñón + Arcilla (Default)',
+      description: 'K=0.72 (72%), T=24s, Esponjamiento=35%, Contracción=12%'
+    },
+    penon: {
+      id: 'penon',
+      name: 'Peñón Predominante (Roca blanda/cementada)',
+      factorLlenadoK: 0.65,
+      tiempoCicloSeg: 27,
+      esponjamientoPct: 40,
+      contraccionPct: 10,
+      badge: 'Peñón 40%',
+      description: 'K=0.65 (65%), T=27s, Esponjamiento=40%, Contracción=10%'
+    },
+    arcilla: {
+      id: 'arcilla',
+      name: 'Arcilla Pesada Húmeda',
+      factorLlenadoK: 0.80,
+      tiempoCicloSeg: 21,
+      esponjamientoPct: 30,
+      contraccionPct: 15,
+      badge: 'Arcilla Húmeda',
+      description: 'K=0.80 (80%), T=21s, Esponjamiento=30%, Contracción=15%'
+    }
+  },
+
+  // Machinery Scheduling and Volumetric Breakdown (Kobelco 210 LC & Doble Troque)
   calculateMachinerySchedule(volumeData, customParams = {}) {
     const cutBank = volumeData.totalCutVolume || 0;
     const fillGeom = volumeData.totalFillVolume || 0;
 
-    const esponjamientoPct = customParams.esponjamientoPct ?? 25; // Default 25% (tierra común/arcilla)
-    const compactacionPct = customParams.compactacionPct ?? 15;   // Default 15% (contracción de terraplén)
-    const rendimientoExcavadora = customParams.rendimientoExcavadora ?? 60; // Default 60 m3/h en banco
-    const horasJornal = customParams.horasJornal ?? 8; // Default 8 h/día
-    const capacidadVolqueta = customParams.capacidadDobleTroque ?? 14; // Default 14 m3 sueltos (Doble Troque)
+    // 1. Equipo: Kobelco 210 LC
+    const equipmentName = customParams.equipmentName || 'Kobelco 210 LC';
+    const bucketCapQ = customParams.bucketCapQ !== undefined ? Number(customParams.bucketCapQ) : 1.00; // Q = 1.00 m³ colmado
+    const efficiencyPct = customParams.efficiencyPct !== undefined ? Number(customParams.efficiencyPct) : 83; // 83% (50 min/h)
+    const factorLlenadoK = customParams.factorLlenadoK !== undefined ? Number(customParams.factorLlenadoK) : 0.72; // 0.72 (72%)
+    const tiempoCicloSeg = customParams.tiempoCicloSeg !== undefined ? Number(customParams.tiempoCicloSeg) : 24; // 24 seg
+    const esponjamientoPct = customParams.esponjamientoPct !== undefined ? Number(customParams.esponjamientoPct) : 35; // 35% (1.35)
+    const contraccionPct = customParams.contraccionPct !== undefined ? Number(customParams.contraccionPct) : 12; // 12%
+    const horasJornal = customParams.horasJornal !== undefined ? Number(customParams.horasJornal) : 8; // 8 h/día
+    const horasPerfilado = customParams.horasPerfilado !== undefined ? Number(customParams.horasPerfilado) : 0.0; // Adicionales perfilado
+    const capacidadVolqueta = customParams.capacidadDobleTroque !== undefined ? Number(customParams.capacidadDobleTroque) : 15.5; // 15.5 m³ por defecto
+    const tiempoViajeBotaderoMin = customParams.tiempoViajeBotaderoMin !== undefined ? Number(customParams.tiempoViajeBotaderoMin) : 25; // min ida y vuelta
     const compensarRelleno = customParams.compensarRelleno ?? true;
+    const soilPreset = customParams.soilPreset || 'mixto';
 
-    // 1. Loose Cut Volume (Volumen de corte suelto a transportar)
-    const cutLooseTotal = cutBank * (1 + esponjamientoPct / 100);
+    const efficiency = efficiencyPct / 100;
+    const swellFactor = 1 + esponjamientoPct / 100;
+    const shrinkFactor = 1 + contraccionPct / 100;
 
-    // 2. Bank Cut needed to achieve compacted fill (Corte en banco requerido para rellenar)
-    const fillBankRequired = fillGeom * (1 + compactacionPct / 100);
+    // 2. Rendimiento horario Kobelco 210 LC:
+    // Ciclos teóricos por hora = 3600 / T
+    const ciclosHora = tiempoCicloSeg > 0 ? (3600 / tiempoCicloSeg) : 0;
+    // Carga real efectiva por baldada suelta = Q * K
+    const volumenEfectivoCucharon = bucketCapQ * factorLlenadoK;
+    // Rendimiento en suelto (m³/h sueltos) = (3600 / T) * Q * K * Eficiencia
+    const rendimientoSueltoHora = ciclosHora * volumenEfectivoCucharon * efficiency;
+    // Rendimiento en banco (m³/h en banco) = Rendimiento suelto / (1 + Esponjamiento/100)
+    const rendimientoBancoHora = swellFactor > 0 ? (rendimientoSueltoHora / swellFactor) : 0;
 
-    // 3. Compensated On-Site Re-use vs Surplus
+    // 3. Horas de Kobelco 210 LC y Jornales:
+    const excavatorHoursBase = rendimientoBancoHora > 0 ? (cutBank / rendimientoBancoHora) : 0;
+    const excavatorHoursTotal = excavatorHoursBase + (isNaN(horasPerfilado) ? 0 : horasPerfilado);
+    const excavatorDays = horasJornal > 0 ? (excavatorHoursTotal / horasJornal) : 0;
+
+    // 4. Volúmenes Suelto y Banco Requerido para Relleno
+    const cutLooseTotal = cutBank * swellFactor;
+    const fillBankRequired = fillGeom * shrinkFactor;
+
+    // 5. Compensación en Sitio y Excedentes a Botadero
     let bankUsedOnSite = 0;
     let surplusBankToHaul = 0;
     let deficitBankRequired = 0;
@@ -911,15 +970,20 @@ const TopoMath = {
       deficitBankRequired = fillBankRequired;
     }
 
-    const surplusLooseToHaul = surplusBankToHaul * (1 + esponjamientoPct / 100);
+    const surplusLooseToHaul = surplusBankToHaul * swellFactor;
 
-    // 4. Excavator Hours & Working Days
-    const excavatorHours = rendimientoExcavadora > 0 ? (cutBank / rendimientoExcavadora) : 0;
-    const excavatorDays = horasJornal > 0 ? (excavatorHours / horasJornal) : 0;
-
-    // 5. Dump Truck Trips (Viajes de Doble Troque de 14m3)
+    // 6. Viajes de Volqueta Doble Troque (15, 15.5 o 16 m³ sueltos)
     const tripsTotalCut = capacidadVolqueta > 0 ? Math.ceil(cutLooseTotal / capacidadVolqueta) : 0;
     const tripsSurplusCompensated = capacidadVolqueta > 0 ? Math.ceil(surplusLooseToHaul / capacidadVolqueta) : 0;
+
+    // 7. Datos de Control en Campo para Operador / Chequeador
+    // Pases / Baldadas colmadas por camión = Capacidad_Volqueta / (Q * K)
+    const baldadasPorCamion = volumenEfectivoCucharon > 0 ? (capacidadVolqueta / volumenEfectivoCucharon) : 0;
+    // Tiempo estimado de cargue por volqueta en minutos = (Capacidad_Volqueta / Rendimiento_Suelto) * 60
+    const tiempoCargueCamionMin = rendimientoSueltoHora > 0 ? (capacidadVolqueta / rendimientoSueltoHora) * 60 : 0;
+    // Flota óptima de volquetas en circuito para trabajo continuo
+    const tiempoCicloCompletoCamionMin = tiempoCargueCamionMin + tiempoViajeBotaderoMin;
+    const volquetasOptimas = tiempoCargueCamionMin > 0 ? Math.ceil(tiempoCicloCompletoCamionMin / tiempoCargueCamionMin) : 1;
 
     return {
       cutBank: Math.round(cutBank * 100) / 100,
@@ -930,16 +994,46 @@ const TopoMath = {
       surplusBankToHaul: Math.round(surplusBankToHaul * 100) / 100,
       surplusLooseToHaul: Math.round(surplusLooseToHaul * 100) / 100,
       deficitBankRequired: Math.round(deficitBankRequired * 100) / 100,
-      excavatorHours: Math.round(excavatorHours * 10) / 10,
+      
+      // Kobelco 210 LC
+      equipmentName,
+      bucketCapQ,
+      efficiencyPct,
+      factorLlenadoK,
+      tiempoCicloSeg,
+      ciclosHora: Math.round(ciclosHora * 10) / 10,
+      volumenEfectivoCucharon: Math.round(volumenEfectivoCucharon * 1000) / 1000,
+      rendimientoSueltoHora: Math.round(rendimientoSueltoHora * 100) / 100,
+      rendimientoBancoHora: Math.round(rendimientoBancoHora * 100) / 100,
+      excavatorHoursBase: Math.round(excavatorHoursBase * 10) / 10,
+      horasPerfilado: Math.round(horasPerfilado * 10) / 10,
+      excavatorHours: Math.round(excavatorHoursTotal * 10) / 10,
       excavatorDays: Math.round(excavatorDays * 10) / 10,
+      
+      // Doble Troque y Chequeador
+      capacidadVolqueta,
       tripsTotalCut,
       tripsSurplusCompensated,
+      baldadasPorCamion: Math.round(baldadasPorCamion * 10) / 10,
+      baldadasExactas: Math.ceil(baldadasPorCamion),
+      tiempoCargueCamionMin: Math.round(tiempoCargueCamionMin * 10) / 10,
+      tiempoViajeBotaderoMin,
+      tiempoCicloCompletoCamionMin: Math.round(tiempoCicloCompletoCamionMin * 10) / 10,
+      volquetasOptimas,
+
       params: {
+        soilPreset,
         esponjamientoPct,
-        compactacionPct,
-        rendimientoExcavadora,
+        contraccionPct,
+        factorLlenadoK,
+        tiempoCicloSeg,
+        bucketCapQ,
+        efficiencyPct,
+        rendimientoExcavadora: Math.round(rendimientoBancoHora * 100) / 100,
         horasJornal,
+        horasPerfilado,
         capacidadVolqueta,
+        tiempoViajeBotaderoMin,
         compensarRelleno
       }
     };

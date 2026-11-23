@@ -125,6 +125,19 @@
 
     // Tab Maquinaria y Cubicación TIN
     dom.machTinMethodBadge = document.getElementById('mach-tin-method-badge');
+    dom.machSoilBadge = document.getElementById('mach-soil-badge');
+    dom.machPresetMixto = document.getElementById('mach-preset-mixto');
+    dom.machPresetPenon = document.getElementById('mach-preset-penon');
+    dom.machPresetArcilla = document.getElementById('mach-preset-arcilla');
+    dom.machFactorK = document.getElementById('mach-factor-k');
+    dom.machCycleTime = document.getElementById('mach-cycle-time');
+    dom.machBucketCap = document.getElementById('mach-bucket-cap');
+    dom.machEfficiency = document.getElementById('mach-efficiency');
+    dom.machProfilingHours = document.getElementById('mach-profiling-hours');
+    dom.machTruckBtn15 = document.getElementById('mach-truck-btn-15');
+    dom.machTruckBtn155 = document.getElementById('mach-truck-btn-155');
+    dom.machTruckBtn16 = document.getElementById('mach-truck-btn-16');
+    dom.machHaulCycleTime = document.getElementById('mach-haul-cycle-time');
     dom.machAreaVal = document.getElementById('mach-area-val');
     dom.machTrianglesCount = document.getElementById('mach-triangles-count');
     dom.machCutBankVal = document.getElementById('mach-cut-bank-val');
@@ -134,12 +147,14 @@
     dom.machCompensateToggle = document.getElementById('mach-compensate-toggle');
     dom.machEsponjamiento = document.getElementById('mach-esponjamiento');
     dom.machCompactacion = document.getElementById('mach-compactacion');
-    dom.machExcavatorYield = document.getElementById('mach-excavator-yield');
     dom.machHoursPerDay = document.getElementById('mach-hours-per-day');
     dom.machTruckCap = document.getElementById('mach-truck-cap');
     dom.machExcYieldLabel = document.getElementById('mach-exc-yield-label');
+    dom.machExcFormulaDesc = document.getElementById('mach-exc-formula-desc');
     dom.machExcHours = document.getElementById('mach-exc-hours');
+    dom.machExcHoursDetail = document.getElementById('mach-exc-hours-detail');
     dom.machExcDays = document.getElementById('mach-exc-days');
+    dom.machExcDaysDetail = document.getElementById('mach-exc-days-detail');
     dom.machTruckCapLabel = document.getElementById('mach-truck-cap-label');
     dom.machTripsTotal = document.getElementById('mach-trips-total');
     dom.machLooseTotalDesc = document.getElementById('mach-loose-total-desc');
@@ -148,6 +163,10 @@
     dom.machBankUsed = document.getElementById('mach-bank-used');
     dom.machDeficitRow = document.getElementById('mach-deficit-row');
     dom.machBankDeficit = document.getElementById('mach-bank-deficit');
+    dom.machTruckPasses = document.getElementById('mach-truck-passes');
+    dom.machTruckLoadTime = document.getElementById('mach-truck-load-time');
+    dom.machTruckFleetOptimal = document.getElementById('mach-truck-fleet-optimal');
+    dom.machFleetCycleDesc = document.getElementById('mach-fleet-cycle-desc');
 
     // Tab Cartera & CSV
     dom.sumCutVol = document.getElementById('sum-cut-vol');
@@ -248,6 +267,7 @@
   async function initApp() {
     cacheDomElements();
     initTheme();
+    loadSavedMachineryParams();
     setupEventListeners();
 
     try {
@@ -1509,6 +1529,95 @@
   };
 
   // --- PESTAÑA CUBICACIÓN EXACTA TIN Y MAQUINARIA PESADA ---
+  function selectSoilPreset(presetKey) {
+    const preset = window.TopoMath.SOIL_PRESETS[presetKey];
+    if (!preset) return;
+
+    if (dom.machPresetMixto) dom.machPresetMixto.classList.toggle('active', presetKey === 'mixto');
+    if (dom.machPresetPenon) dom.machPresetPenon.classList.toggle('active', presetKey === 'penon');
+    if (dom.machPresetArcilla) dom.machPresetArcilla.classList.toggle('active', presetKey === 'arcilla');
+
+    if (dom.machFactorK) dom.machFactorK.value = preset.factorLlenadoK;
+    if (dom.machCycleTime) dom.machCycleTime.value = preset.tiempoCicloSeg;
+    if (dom.machEsponjamiento) dom.machEsponjamiento.value = preset.esponjamientoPct;
+    if (dom.machCompactacion) dom.machCompactacion.value = preset.contraccionPct;
+    if (dom.machSoilBadge) dom.machSoilBadge.textContent = preset.badge;
+
+    state.machineryPreset = presetKey;
+    saveMachineryParamsToStorage();
+    renderMachineryTab();
+  }
+
+  function selectTruckCapacity(cap) {
+    const numCap = parseFloat(cap);
+    if (isNaN(numCap)) return;
+
+    if (dom.machTruckBtn15) dom.machTruckBtn15.classList.toggle('active', numCap === 15);
+    if (dom.machTruckBtn155) dom.machTruckBtn155.classList.toggle('active', Math.abs(numCap - 15.5) < 0.01);
+    if (dom.machTruckBtn16) dom.machTruckBtn16.classList.toggle('active', numCap === 16);
+
+    if (dom.machTruckCap) dom.machTruckCap.value = numCap;
+    saveMachineryParamsToStorage();
+    renderMachineryTab();
+  }
+
+  function saveMachineryParamsToStorage() {
+    try {
+      const params = {
+        soilPreset: state.machineryPreset || 'mixto',
+        bucketCapQ: parseFloat(dom.machBucketCap ? dom.machBucketCap.value : 1.0) || 1.0,
+        factorLlenadoK: parseFloat(dom.machFactorK ? dom.machFactorK.value : 0.72) || 0.72,
+        tiempoCicloSeg: parseFloat(dom.machCycleTime ? dom.machCycleTime.value : 24) || 24,
+        efficiencyPct: parseFloat(dom.machEfficiency ? dom.machEfficiency.value : 83) || 83,
+        esponjamientoPct: parseFloat(dom.machEsponjamiento ? dom.machEsponjamiento.value : 35) || 35,
+        contraccionPct: parseFloat(dom.machCompactacion ? dom.machCompactacion.value : 12) || 12,
+        horasJornal: parseFloat(dom.machHoursPerDay ? dom.machHoursPerDay.value : 8) || 8,
+        horasPerfilado: parseFloat(dom.machProfilingHours ? dom.machProfilingHours.value : 0) || 0,
+        capacidadDobleTroque: parseFloat(dom.machTruckCap ? dom.machTruckCap.value : 15.5) || 15.5,
+        tiempoViajeBotaderoMin: parseFloat(dom.machHaulCycleTime ? dom.machHaulCycleTime.value : 25) || 25,
+        compensarRelleno: dom.machCompensateToggle ? dom.machCompensateToggle.checked : true
+      };
+      localStorage.setItem('topolago_machinery_calibrated', JSON.stringify(params));
+    } catch (e) {
+      console.warn('Error al guardar parámetros de maquinaria en storage:', e);
+    }
+  }
+
+  function loadSavedMachineryParams() {
+    try {
+      const savedStr = localStorage.getItem('topolago_machinery_calibrated');
+      if (!savedStr) return;
+      const p = JSON.parse(savedStr);
+      if (p.soilPreset) state.machineryPreset = p.soilPreset;
+      if (dom.machBucketCap && p.bucketCapQ !== undefined) dom.machBucketCap.value = p.bucketCapQ;
+      if (dom.machFactorK && p.factorLlenadoK !== undefined) dom.machFactorK.value = p.factorLlenadoK;
+      if (dom.machCycleTime && p.tiempoCicloSeg !== undefined) dom.machCycleTime.value = p.tiempoCicloSeg;
+      if (dom.machEfficiency && p.efficiencyPct !== undefined) dom.machEfficiency.value = p.efficiencyPct;
+      if (dom.machEsponjamiento && p.esponjamientoPct !== undefined) dom.machEsponjamiento.value = p.esponjamientoPct;
+      if (dom.machCompactacion && p.contraccionPct !== undefined) dom.machCompactacion.value = p.contraccionPct;
+      if (dom.machHoursPerDay && p.horasJornal !== undefined) dom.machHoursPerDay.value = p.horasJornal;
+      if (dom.machProfilingHours && p.horasPerfilado !== undefined) dom.machProfilingHours.value = p.horasPerfilado;
+      if (dom.machTruckCap && p.capacidadDobleTroque !== undefined) dom.machTruckCap.value = p.capacidadDobleTroque;
+      if (dom.machHaulCycleTime && p.tiempoViajeBotaderoMin !== undefined) dom.machHaulCycleTime.value = p.tiempoViajeBotaderoMin;
+      if (dom.machCompensateToggle && p.compensarRelleno !== undefined) dom.machCompensateToggle.checked = p.compensarRelleno;
+
+      if (p.soilPreset) {
+        if (dom.machPresetMixto) dom.machPresetMixto.classList.toggle('active', p.soilPreset === 'mixto');
+        if (dom.machPresetPenon) dom.machPresetPenon.classList.toggle('active', p.soilPreset === 'penon');
+        if (dom.machPresetArcilla) dom.machPresetArcilla.classList.toggle('active', p.soilPreset === 'arcilla');
+        const prObj = window.TopoMath.SOIL_PRESETS[p.soilPreset];
+        if (prObj && dom.machSoilBadge) dom.machSoilBadge.textContent = prObj.badge;
+      }
+      if (p.capacidadDobleTroque !== undefined) {
+        if (dom.machTruckBtn15) dom.machTruckBtn15.classList.toggle('active', p.capacidadDobleTroque === 15);
+        if (dom.machTruckBtn155) dom.machTruckBtn155.classList.toggle('active', Math.abs(p.capacidadDobleTroque - 15.5) < 0.01);
+        if (dom.machTruckBtn16) dom.machTruckBtn16.classList.toggle('active', p.capacidadDobleTroque === 16);
+      }
+    } catch (e) {
+      console.warn('Error al cargar parámetros guardados:', e);
+    }
+  }
+
   function renderMachineryTab() {
     if (!state.project || !state.stakes) return;
 
@@ -1519,21 +1628,34 @@
     const s = state.project.settings;
     const tinVolumes = window.TopoMath.calculateExactTINVolumes(state.stakes, tin ? tin.triangles : [], s);
 
-    // Parámetros de maquinaria
-    const esponjamiento = parseFloat(dom.machEsponjamiento ? dom.machEsponjamiento.value : 25) || 25;
-    const compactacion = parseFloat(dom.machCompactacion ? dom.machCompactacion.value : 15) || 15;
-    const rendimientoExcavadora = parseFloat(dom.machExcavatorYield ? dom.machExcavatorYield.value : 60) || 60;
+    // Parámetros Kobelco 210 LC y Flota Doble Troque
+    const bucketCapQ = parseFloat(dom.machBucketCap ? dom.machBucketCap.value : 1.0) || 1.0;
+    const factorLlenadoK = parseFloat(dom.machFactorK ? dom.machFactorK.value : 0.72) || 0.72;
+    const tiempoCicloSeg = parseFloat(dom.machCycleTime ? dom.machCycleTime.value : 24) || 24;
+    const efficiencyPct = parseFloat(dom.machEfficiency ? dom.machEfficiency.value : 83) || 83;
+    const esponjamientoPct = parseFloat(dom.machEsponjamiento ? dom.machEsponjamiento.value : 35) || 35;
+    const contraccionPct = parseFloat(dom.machCompactacion ? dom.machCompactacion.value : 12) || 12;
     const horasJornal = parseFloat(dom.machHoursPerDay ? dom.machHoursPerDay.value : 8) || 8;
-    const capacidadVolqueta = parseFloat(dom.machTruckCap ? dom.machTruckCap.value : 14) || 14;
+    const horasPerfilado = parseFloat(dom.machProfilingHours ? dom.machProfilingHours.value : 0) || 0;
+    const capacidadVolqueta = parseFloat(dom.machTruckCap ? dom.machTruckCap.value : 15.5) || 15.5;
+    const tiempoViajeBotaderoMin = parseFloat(dom.machHaulCycleTime ? dom.machHaulCycleTime.value : 25) || 25;
     const compensarRelleno = dom.machCompensateToggle ? dom.machCompensateToggle.checked : true;
+    const soilPreset = state.machineryPreset || 'mixto';
 
     const machSchedule = window.TopoMath.calculateMachinerySchedule(tinVolumes, {
-      esponjamientoPct: esponjamiento,
-      compactacionPct: compactacion,
-      rendimientoExcavadora: rendimientoExcavadora,
-      horasJornal: horasJornal,
+      equipmentName: 'Kobelco 210 LC',
+      bucketCapQ,
+      factorLlenadoK,
+      tiempoCicloSeg,
+      efficiencyPct,
+      esponjamientoPct,
+      contraccionPct,
+      horasJornal,
+      horasPerfilado,
       capacidadDobleTroque: capacidadVolqueta,
-      compensarRelleno: compensarRelleno
+      tiempoViajeBotaderoMin,
+      compensarRelleno,
+      soilPreset
     });
 
     if (dom.machTinMethodBadge) {
@@ -1562,13 +1684,24 @@
       }
     }
 
-    // Excavadora
-    if (dom.machExcYieldLabel) dom.machExcYieldLabel.textContent = `@ ${rendimientoExcavadora} m³/h en banco`;
+    // Excavadora Kobelco 210 LC
+    if (dom.machExcYieldLabel) {
+      dom.machExcYieldLabel.textContent = `R_banco = ${machSchedule.rendimientoBancoHora.toFixed(1)} m³/h`;
+    }
+    if (dom.machExcFormulaDesc) {
+      dom.machExcFormulaDesc.textContent = `R_suelto = ${machSchedule.rendimientoSueltoHora.toFixed(1)} m³/h (Q=${bucketCapQ.toFixed(2)}m³, K=${factorLlenadoK.toFixed(2)}, T=${tiempoCicloSeg}s, E=${efficiencyPct}%)`;
+    }
     if (dom.machExcHours) dom.machExcHours.textContent = `${machSchedule.excavatorHours.toFixed(1)} h`;
+    if (dom.machExcHoursDetail) {
+      dom.machExcHoursDetail.textContent = `Base: ${machSchedule.excavatorHoursBase.toFixed(1)}h + Perfilado: ${machSchedule.horasPerfilado.toFixed(1)}h`;
+    }
     if (dom.machExcDays) dom.machExcDays.textContent = `${machSchedule.excavatorDays.toFixed(1)} días`;
+    if (dom.machExcDaysDetail) {
+      dom.machExcDaysDetail.textContent = `Turnos de ${horasJornal}h`;
+    }
 
-    // Volqueta
-    if (dom.machTruckCapLabel) dom.machTruckCapLabel.textContent = `${capacidadVolqueta} m³ sueltos`;
+    // Volqueta Doble Troque
+    if (dom.machTruckCapLabel) dom.machTruckCapLabel.textContent = `${capacidadVolqueta.toFixed(1)} m³ sueltos`;
     if (dom.machTripsTotal) dom.machTripsTotal.textContent = `${machSchedule.tripsTotalCut} viajes`;
     if (dom.machLooseTotalDesc) dom.machLooseTotalDesc.textContent = `Vol. Suelto Total: ${machSchedule.cutLooseTotal.toFixed(1)} m³`;
     if (dom.machTripsSurplus) dom.machTripsSurplus.textContent = `${machSchedule.tripsSurplusCompensated} viajes`;
@@ -1584,6 +1717,21 @@
         dom.machDeficitRow.style.display = 'none';
       }
     }
+
+    // Ficha de Control en Campo: Operador & Chequeador
+    if (dom.machTruckPasses) {
+      dom.machTruckPasses.textContent = `${machSchedule.baldadasPorCamion.toFixed(1)} (~${machSchedule.baldadasExactas})`;
+    }
+    if (dom.machTruckLoadTime) {
+      dom.machTruckLoadTime.textContent = `${machSchedule.tiempoCargueCamionMin.toFixed(1)} min`;
+    }
+    if (dom.machTruckFleetOptimal) {
+      dom.machTruckFleetOptimal.textContent = `${machSchedule.volquetasOptimas} volquetas`;
+    }
+    if (dom.machFleetCycleDesc) {
+      dom.machFleetCycleDesc.textContent = `Para ciclo de ${tiempoViajeBotaderoMin} min botadero`;
+    }
+  }
   }
 
   // --- 7. PESTAÑA CARTERA TOPOGRÁFICA Y EXPORTACIÓN ---
@@ -1691,49 +1839,74 @@
     csv += `Balance Neto de Tierra${sep}${fmtNum(sum.netBalance, 2)} m³\n`;
     csv += `Estacas Medidas${sep}${sum.measuredCount} de ${sum.totalStakes} (${sum.coveragePercent}%)\n\n`;
 
-    // Sección 5: Cubicación Exacta TIN y Programación de Maquinaria Pesada (Estándar Colombia)
+    // Sección 5: Cubicación Exacta TIN y Flota Calibrada (Kobelco 210 LC & Doble Troque)
     const tin = state.canvas.tinData || window.TopoMath.computeDelaunayTIN(state.stakes);
     const tinVolumes = window.TopoMath.calculateExactTINVolumes(state.stakes, tin ? tin.triangles : [], state.project.settings);
-    const esponjamiento = parseFloat(dom.machEsponjamiento ? dom.machEsponjamiento.value : 25) || 25;
-    const compactacion = parseFloat(dom.machCompactacion ? dom.machCompactacion.value : 15) || 15;
-    const rendimientoExcavadora = parseFloat(dom.machExcavatorYield ? dom.machExcavatorYield.value : 60) || 60;
+    const bucketCapQ = parseFloat(dom.machBucketCap ? dom.machBucketCap.value : 1.0) || 1.0;
+    const factorLlenadoK = parseFloat(dom.machFactorK ? dom.machFactorK.value : 0.72) || 0.72;
+    const tiempoCicloSeg = parseFloat(dom.machCycleTime ? dom.machCycleTime.value : 24) || 24;
+    const efficiencyPct = parseFloat(dom.machEfficiency ? dom.machEfficiency.value : 83) || 83;
+    const esponjamientoPct = parseFloat(dom.machEsponjamiento ? dom.machEsponjamiento.value : 35) || 35;
+    const contraccionPct = parseFloat(dom.machCompactacion ? dom.machCompactacion.value : 12) || 12;
     const horasJornal = parseFloat(dom.machHoursPerDay ? dom.machHoursPerDay.value : 8) || 8;
-    const capacidadVolqueta = parseFloat(dom.machTruckCap ? dom.machTruckCap.value : 14) || 14;
+    const horasPerfilado = parseFloat(dom.machProfilingHours ? dom.machProfilingHours.value : 0) || 0;
+    const capacidadVolqueta = parseFloat(dom.machTruckCap ? dom.machTruckCap.value : 15.5) || 15.5;
+    const tiempoViajeBotaderoMin = parseFloat(dom.machHaulCycleTime ? dom.machHaulCycleTime.value : 25) || 25;
     const compensarRelleno = dom.machCompensateToggle ? dom.machCompensateToggle.checked : true;
+    const soilPreset = state.machineryPreset || 'mixto';
 
     const machSchedule = window.TopoMath.calculateMachinerySchedule(tinVolumes, {
-      esponjamientoPct: esponjamiento,
-      compactacionPct: compactacion,
-      rendimientoExcavadora: rendimientoExcavadora,
-      horasJornal: horasJornal,
+      equipmentName: 'Kobelco 210 LC',
+      bucketCapQ,
+      factorLlenadoK,
+      tiempoCicloSeg,
+      efficiencyPct,
+      esponjamientoPct,
+      contraccionPct,
+      horasJornal,
+      horasPerfilado,
       capacidadDobleTroque: capacidadVolqueta,
-      compensarRelleno: compensarRelleno
+      tiempoViajeBotaderoMin,
+      compensarRelleno,
+      soilPreset
     });
 
-    csv += `--- CUBICACIÓN EXACTA TIN Y PROGRAMACIÓN DE MAQUINARIA (COLOMBIA) ---\n`;
+    csv += `--- CUBICACIÓN EXACTA TIN Y FLOTA DE MAQUINARIA CALIBRADA ---\n`;
     csv += `Método de Cubicación${sep}${tinVolumes.method || 'TIN Exacto con Subdivisión Cota Cero'}\n`;
     csv += `Área Malla Medida${sep}${fmtNum(tinVolumes.totalAreaMeasured, 2)} m²\n`;
     csv += `Triángulos Medidos${sep}${tinVolumes.measuredTrianglesCount} de ${tinVolumes.totalTrianglesCount || 0}\n`;
     csv += `Corte Puro en Banco${sep}${fmtNum(tinVolumes.totalCutVolume, 2)} m³\n`;
     csv += `Relleno Puro Geométrico${sep}${fmtNum(tinVolumes.totalFillVolume, 2)} m³\n`;
     csv += `Balance Neto de Tierra${sep}${fmtNum(tinVolumes.netBalance, 2)} m³\n`;
-    csv += `Factor de Esponjamiento${sep}${esponjamiento} %\n`;
-    csv += `Volumen de Corte Suelto Total${sep}${fmtNum(machSchedule.cutLooseTotal, 2)} m³\n`;
-    csv += `Factor de Compactación${sep}${compactacion} %\n`;
-    csv += `Corte en Banco Requerido para Relleno${sep}${fmtNum(machSchedule.fillBankRequired, 2)} m³\n`;
+    csv += `Tipo de Suelo (Preset)${sep}"${window.TopoMath.SOIL_PRESETS[soilPreset] ? window.TopoMath.SOIL_PRESETS[soilPreset].name : 'Personalizado'}"\n`;
+    csv += `Equipo Principal${sep}Excavadora Kobelco 210 LC\n`;
+    csv += `Capacidad Cucharón Colmado (Q)${sep}${fmtNum(bucketCapQ, 2)} m³\n`;
+    csv += `Factor Llenado Cucharón (K)${sep}${fmtNum(factorLlenadoK, 2)} (${(factorLlenadoK * 100).toFixed(0)}%)\n`;
+    csv += `Tiempo Ciclo Excavadora (T)${sep}${tiempoCicloSeg} segundos\n`;
+    csv += `Eficiencia Operativa${sep}${efficiencyPct} % (50 min/hora)\n`;
+    csv += `Factor de Esponjamiento${sep}${esponjamientoPct} %\n`;
+    csv += `Factor de Contracción${sep}${contraccionPct} %\n`;
+    csv += `Rendimiento Excavadora en Banco (R_banco)${sep}${fmtNum(machSchedule.rendimientoBancoHora, 2)} m³/h banco\n`;
+    csv += `Rendimiento Excavadora en Suelto (R_suelto)${sep}${fmtNum(machSchedule.rendimientoSueltoHora, 2)} m³/h suelto\n`;
+    csv += `Horas Base Excavación${sep}${fmtNum(machSchedule.excavatorHoursBase, 1)} horas\n`;
+    csv += `Horas Adicionales Perfilado/Cuneteo${sep}${fmtNum(machSchedule.horasPerfilado, 1)} horas\n`;
+    csv += `Horas Totales Kobelco 210 LC${sep}${fmtNum(machSchedule.excavatorHours, 1)} horas\n`;
+    csv += `Jornales Estimados (${horasJornal}h/día)${sep}${fmtNum(machSchedule.excavatorDays, 1)} días\n`;
+    csv += `Capacidad Volqueta Doble Troque${sep}${fmtNum(capacidadVolqueta, 1)} m³ sueltos\n`;
+    csv += `Baldadas Colmadas por Camión (Q*K)${sep}${fmtNum(machSchedule.baldadasPorCamion, 1)} (~${machSchedule.baldadasExactas} baldadas)\n`;
+    csv += `Tiempo Estimado de Cargue por Volqueta${sep}${fmtNum(machSchedule.tiempoCargueCamionMin, 1)} minutos\n`;
+    csv += `Tiempo Ciclo Ida y Vuelta Botadero${sep}${tiempoViajeBotaderoMin} minutos\n`;
+    csv += `Volquetas Óptimas en Circuito${sep}${machSchedule.volquetasOptimas} volquetas\n`;
+    csv += `Volumen Total Corte Suelto${sep}${fmtNum(machSchedule.cutLooseTotal, 2)} m³ sueltos\n`;
+    csv += `Viajes Totales Doble Troque${sep}${machSchedule.tripsTotalCut} viajes\n`;
     csv += `Compensación de Relleno en Sitio${sep}${compensarRelleno ? 'ACTIVADA' : 'DESACTIVADA'}\n`;
     csv += `Tierra Reutilizada en Sitio${sep}${fmtNum(machSchedule.bankUsedOnSite, 2)} m³ banco\n`;
-    csv += `Excedente en Banco a Retirar${sep}${fmtNum(machSchedule.surplusBankToHaul, 2)} m³ banco\n`;
-    csv += `Excedente Suelto a Retirar${sep}${fmtNum(machSchedule.surplusLooseToHaul, 2)} m³ sueltos\n`;
+    csv += `Excedente en Banco a Botadero${sep}${fmtNum(machSchedule.surplusBankToHaul, 2)} m³ banco\n`;
+    csv += `Excedente Suelto a Botadero${sep}${fmtNum(machSchedule.surplusLooseToHaul, 2)} m³ sueltos\n`;
+    csv += `Viajes Netos a Botadero (Compensados)${sep}${machSchedule.tripsSurplusCompensated} viajes\n`;
     if (machSchedule.deficitBankRequired > 0.05) {
       csv += `Déficit de Material (Préstamo Requerido)${sep}${fmtNum(machSchedule.deficitBankRequired, 2)} m³ banco\n`;
     }
-    csv += `Rendimiento Excavadora CAT/Komatsu${sep}${rendimientoExcavadora} m³/h en banco\n`;
-    csv += `Horas de Excavadora Estimadas${sep}${fmtNum(machSchedule.excavatorHours, 1)} horas\n`;
-    csv += `Jornales de Excavadora (${horasJornal}h/día)${sep}${fmtNum(machSchedule.excavatorDays, 1)} días\n`;
-    csv += `Capacidad Volqueta Doble Troque${sep}${capacidadVolqueta} m³ sueltos\n`;
-    csv += `Viajes Doble Troque (Botando todo el corte)${sep}${machSchedule.tripsTotalCut} viajes\n`;
-    csv += `Viajes Doble Troque (Solo excedente compensado)${sep}${machSchedule.tripsSurplusCompensated} viajes\n`;
 
     // Descargar archivo Blob
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1997,13 +2170,47 @@
     if (dom.taludDiagB) dom.taludDiagB.addEventListener('input', updateTaludAngleFromDiagonal);
     if (dom.taludDiagC) dom.taludDiagC.addEventListener('input', updateTaludAngleFromDiagonal);
 
-    // Pestaña Maquinaria y Cubicación TIN
-    if (dom.machCompensateToggle) dom.machCompensateToggle.addEventListener('change', renderMachineryTab);
-    if (dom.machEsponjamiento) dom.machEsponjamiento.addEventListener('input', renderMachineryTab);
-    if (dom.machCompactacion) dom.machCompactacion.addEventListener('input', renderMachineryTab);
-    if (dom.machExcavatorYield) dom.machExcavatorYield.addEventListener('input', renderMachineryTab);
-    if (dom.machHoursPerDay) dom.machHoursPerDay.addEventListener('input', renderMachineryTab);
-    if (dom.machTruckCap) dom.machTruckCap.addEventListener('input', renderMachineryTab);
+    // Pestaña Maquinaria y Cubicación TIN (Kobelco 210 LC & Doble Troque)
+    if (dom.machPresetMixto) dom.machPresetMixto.addEventListener('click', () => selectSoilPreset('mixto'));
+    if (dom.machPresetPenon) dom.machPresetPenon.addEventListener('click', () => selectSoilPreset('penon'));
+    if (dom.machPresetArcilla) dom.machPresetArcilla.addEventListener('click', () => selectSoilPreset('arcilla'));
+
+    if (dom.machTruckBtn15) dom.machTruckBtn15.addEventListener('click', () => selectTruckCapacity(15));
+    if (dom.machTruckBtn155) dom.machTruckBtn155.addEventListener('click', () => selectTruckCapacity(15.5));
+    if (dom.machTruckBtn16) dom.machTruckBtn16.addEventListener('click', () => selectTruckCapacity(16));
+
+    if (dom.machCompensateToggle) {
+      dom.machCompensateToggle.addEventListener('change', () => {
+        saveMachineryParamsToStorage();
+        renderMachineryTab();
+      });
+    }
+
+    const machInputFields = [
+      dom.machBucketCap, dom.machFactorK, dom.machCycleTime, dom.machEfficiency,
+      dom.machEsponjamiento, dom.machCompactacion, dom.machHoursPerDay,
+      dom.machProfilingHours, dom.machTruckCap, dom.machHaulCycleTime
+    ];
+    machInputFields.forEach(el => {
+      if (el) {
+        el.addEventListener('input', () => {
+          if (dom.machSoilBadge && (el === dom.machFactorK || el === dom.machCycleTime || el === dom.machEsponjamiento || el === dom.machCompactacion)) {
+            dom.machSoilBadge.textContent = 'Personalizado';
+            if (dom.machPresetMixto) dom.machPresetMixto.classList.remove('active');
+            if (dom.machPresetPenon) dom.machPresetPenon.classList.remove('active');
+            if (dom.machPresetArcilla) dom.machPresetArcilla.classList.remove('active');
+          }
+          if (el === dom.machTruckCap) {
+            const v = parseFloat(dom.machTruckCap.value);
+            if (dom.machTruckBtn15) dom.machTruckBtn15.classList.toggle('active', v === 15);
+            if (dom.machTruckBtn155) dom.machTruckBtn155.classList.toggle('active', Math.abs(v - 15.5) < 0.01);
+            if (dom.machTruckBtn16) dom.machTruckBtn16.classList.toggle('active', v === 16);
+          }
+          saveMachineryParamsToStorage();
+          renderMachineryTab();
+        });
+      }
+    });
 
     // Station tab
     dom.stBmElev.addEventListener('input', updateStationCalculationPreview);

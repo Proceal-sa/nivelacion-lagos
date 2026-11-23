@@ -595,73 +595,157 @@
           </div>
         </div>
 
-        <!-- Parámetros de Maquinaria Pesada para Colombia -->
+        <!-- Selector Rápido de Tipo de Suelo (Presets Reales) -->
         <div class="card">
           <div class="card-header">
-            <h2 class="card-title">⚙️ Parámetros de Maquinaria (Estándar Colombia)</h2>
+            <h2 class="card-title">🌱 Tipo de Suelo y Geotecnia de Excavación</h2>
+            <span id="mach-soil-badge" class="badge-offline" style="background:#0284c7; font-size:0.75rem;">Peñón + Arcilla</span>
+          </div>
+
+          <label class="form-label" style="font-size: 0.8rem; margin-bottom: 6px;">
+            Selecciona un Preset para autocalibrar factores (o edítalos libremente abajo):
+          </label>
+          <div class="preset-pill-group">
+            <button type="button" id="mach-preset-mixto" class="preset-pill-btn active" data-preset="mixto">
+              <span>🪨 Mixto: Peñón + Arcilla Pesada</span>
+            </button>
+            <button type="button" id="mach-preset-penon" class="preset-pill-btn" data-preset="penon">
+              <span>⛰️ Peñón Predominante</span>
+            </button>
+            <button type="button" id="mach-preset-arcilla" class="preset-pill-btn" data-preset="arcilla">
+              <span>🧱 Arcilla Pesada Húmeda</span>
+            </button>
           </div>
 
           <div class="form-grid-2">
             <div class="form-group">
-              <label class="form-label" for="mach-esponjamiento">Factor de Esponjamiento (%):</label>
-              <input type="number" id="mach-esponjamiento" class="form-control" min="0" max="100" value="25" step="1">
-              <div class="form-help">Default: 25% (convierte m³ banco a m³ sueltos para acarreo)</div>
+              <label class="form-label" for="mach-factor-k" style="font-size: 0.78rem;">Factor Llenado Cucharón (K):</label>
+              <input type="number" id="mach-factor-k" class="form-control" min="0.4" max="1.2" value="0.72" step="0.01">
+              <div class="form-help">Ej. 0.72 = 72% llenado real</div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="mach-compactacion">Factor de Compactación (%):</label>
-              <input type="number" id="mach-compactacion" class="form-control" min="0" max="100" value="15" step="1">
-              <div class="form-help">Default: 15% (corte en banco necesario para 1 m³ compactado)</div>
+              <label class="form-label" for="mach-cycle-time" style="font-size: 0.78rem;">Tiempo de Ciclo Excavadora (T):</label>
+              <input type="number" id="mach-cycle-time" class="form-control" min="10" max="60" value="24" step="1">
+              <div class="form-help">Segundos por ciclo excavar-girar-botar</div>
             </div>
           </div>
 
-          <div class="form-grid-3">
+          <div class="form-grid-2">
             <div class="form-group">
-              <label class="form-label" for="mach-excavator-yield" style="font-size: 0.78rem;">Rendimiento Excavadora:</label>
-              <input type="number" id="mach-excavator-yield" class="form-control" min="10" max="300" value="60" step="5">
-              <div class="form-help">m³/h en banco (CAT 320 / PC200)</div>
+              <label class="form-label" for="mach-esponjamiento" style="font-size: 0.78rem;">Factor de Esponjamiento (%):</label>
+              <input type="number" id="mach-esponjamiento" class="form-control" min="0" max="100" value="35" step="1">
+              <div class="form-help">Banco a suelto (35% = 1.35)</div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="mach-hours-per-day" style="font-size: 0.78rem;">Horas por Jornal:</label>
-              <input type="number" id="mach-hours-per-day" class="form-control" min="4" max="24" value="8" step="1">
-              <div class="form-help">Horas/día de trabajo</div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="mach-truck-cap" style="font-size: 0.78rem;">Capacidad Doble Troque:</label>
-              <input type="number" id="mach-truck-cap" class="form-control" min="5" max="35" value="14" step="1">
-              <div class="form-help">m³ sueltos por viaje</div>
+              <label class="form-label" for="mach-compactacion" style="font-size: 0.78rem;">Contracción al Compactar (%):</label>
+              <input type="number" id="mach-compactacion" class="form-control" min="0" max="100" value="12" step="1">
+              <div class="form-help">Corte banco extra para relleno compactado</div>
             </div>
           </div>
         </div>
 
-        <!-- Tarjetas de Programación de Maquinaria y Viajes -->
-        <div class="card" style="border-color: #0284c7; background: #f0f9ff;">
-          <div class="card-header" style="border-bottom-color: #bae6fd;">
-            <h2 class="card-title" style="color: #0369a1;">🚜 Programación de Excavadora y Volqueta Doble Troque</h2>
+        <!-- Ficha de Equipo y Flota Calibrada -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">🚜 Flota Calibrada: Kobelco 210 LC & Volquetas Doble Troque</h2>
           </div>
 
-          <!-- Excavadora -->
-          <div class="mach-box-inner" style="background: #ffffff; border: 2px solid #0284c7; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-              <span style="font-weight: 800; font-size: 1rem; color: #0c4a6e;">🏗️ Excavadora de Oruga</span>
-              <span style="font-size: 0.8rem; font-weight: 700; color: #0284c7;" id="mach-exc-yield-label">@ 60 m³/h</span>
+          <!-- Parámetros Kobelco 210 LC -->
+          <div style="font-weight: 800; font-size: 0.88rem; color: #0284c7; margin-bottom: 6px;">
+            🏗️ Excavadora Kobelco 210 LC:
+          </div>
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label" for="mach-bucket-cap" style="font-size: 0.78rem;">Cucharón Colmado (Q):</label>
+              <input type="number" id="mach-bucket-cap" class="form-control" min="0.5" max="2.5" value="1.00" step="0.05">
+              <div class="form-help">m³ colmado con morro</div>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+            <div class="form-group">
+              <label class="form-label" for="mach-efficiency" style="font-size: 0.78rem;">Eficiencia Operativa (%):</label>
+              <input type="number" id="mach-efficiency" class="form-control" min="50" max="100" value="83" step="1">
+              <div class="form-help">83% (50 min/h efectivos)</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="mach-hours-per-day" style="font-size: 0.78rem;">Horas por Turno/Jornal:</label>
+              <input type="number" id="mach-hours-per-day" class="form-control" min="4" max="24" value="8" step="1">
+              <div class="form-help">Horas/día de trabajo</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="mach-profiling-hours" style="font-size: 0.78rem;">
+              🧹 Horas adicionales perfilado / cuneteo de piso (Opcional):
+            </label>
+            <input type="number" id="mach-profiling-hours" class="form-control" min="0" max="100" value="0.0" step="0.5">
+            <div class="form-help">Horas de máquina para afinar taludes y piso al cierre del lago</div>
+          </div>
+
+          <!-- Selector Rápido Volquetas Doble Troque con compuerta -->
+          <div style="font-weight: 800; font-size: 0.88rem; color: #0284c7; margin-top: 10px; margin-bottom: 6px;">
+            🚛 Volqueta Doble Troque con compuerta:
+          </div>
+          <label class="form-label" style="font-size: 0.78rem; margin-bottom: 4px;">Capacidad del Volco (Suelto):</label>
+          <div class="preset-pill-group">
+            <button type="button" id="mach-truck-btn-15" class="preset-pill-btn" data-cap="15">
+              <span>15.0 m³</span>
+            </button>
+            <button type="button" id="mach-truck-btn-155" class="preset-pill-btn active" data-cap="15.5">
+              <span>15.5 m³ (Default)</span>
+            </button>
+            <button type="button" id="mach-truck-btn-16" class="preset-pill-btn" data-cap="16">
+              <span>16.0 m³</span>
+            </button>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="mach-truck-cap" style="font-size: 0.78rem;">Capacidad Seleccionada (m³):</label>
+              <input type="number" id="mach-truck-cap" class="form-control" min="8" max="30" value="15.5" step="0.5">
+              <div class="form-help">m³ sueltos cargados por camión</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="mach-haul-cycle-time" style="font-size: 0.78rem;">Tiempo Ciclo Botadero (min):</label>
+              <input type="number" id="mach-haul-cycle-time" class="form-control" min="5" max="180" value="25" step="1">
+              <div class="form-help">Minutos ida, descargue y vuelta</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarjetas de Resultados Operativos y Programación -->
+        <div class="card" style="border-color: #0284c7; background: #f0f9ff;">
+          <div class="card-header" style="border-bottom-color: #bae6fd;">
+            <h2 class="card-title" style="color: #0369a1;">📊 Resultados y Programación de Obra</h2>
+          </div>
+
+          <!-- Excavadora Kobelco 210 LC -->
+          <div class="mach-box-inner" style="background: #ffffff; border: 2px solid #0284c7; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px;">
+              <span style="font-weight: 800; font-size: 1rem; color: #0c4a6e;">🏗️ Excavadora Kobelco 210 LC</span>
+              <span style="font-size: 0.85rem; font-weight: 800; color: #0284c7;" id="mach-exc-yield-label">R_banco = 0.0 m³/h</span>
+            </div>
+            <div style="font-size: 0.74rem; color: #64748b; margin-top: 2px;" id="mach-exc-formula-desc">
+              R_banco = ((3600/T) * Q * K * E) / (1 + Esp)
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
               <div>
                 <div style="font-size: 0.75rem; color: #64748b; font-weight: 700;">Horas de Máquina:</div>
                 <div style="font-family: var(--font-mono); font-size: 1.8rem; font-weight: 900; color: #0f172a;" id="mach-exc-hours">0.0 h</div>
+                <small style="font-size: 0.72rem; color: #64748b;" id="mach-exc-hours-detail">Base: 0.0h + Perf: 0.0h</small>
               </div>
               <div>
                 <div style="font-size: 0.75rem; color: #64748b; font-weight: 700;">Jornales Estimados:</div>
                 <div style="font-family: var(--font-mono); font-size: 1.8rem; font-weight: 900; color: #0284c7;" id="mach-exc-days">0.0 días</div>
+                <small style="font-size: 0.72rem; color: #64748b;" id="mach-exc-days-detail">Turnos de 8h</small>
               </div>
             </div>
           </div>
 
           <!-- Volqueta Doble Troque -->
-          <div class="mach-box-inner" style="background: #ffffff; border: 2px solid #0284c7; border-radius: 10px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="mach-box-inner" style="background: #ffffff; border: 2px solid #0284c7; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px;">
               <span style="font-weight: 800; font-size: 1rem; color: #0c4a6e;">🚛 Volquetas Doble Troque</span>
-              <span style="font-size: 0.8rem; font-weight: 700; color: #0284c7;" id="mach-truck-cap-label">14 m³ sueltos</span>
+              <span style="font-size: 0.85rem; font-weight: 800; color: #0284c7;" id="mach-truck-cap-label">15.5 m³ sueltos</span>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
@@ -684,6 +768,38 @@
               <div id="mach-deficit-row" style="color: #ea580c; display: none;">⚠️ Falta material para relleno (Préstamo requerido): <strong id="mach-bank-deficit" style="font-family: var(--font-mono);">0.00 m³</strong> banco</div>
             </div>
           </div>
+
+          <!-- TARJETA DE CONTROL EN CAMPO: OPERADOR & CHEQUEADOR -->
+          <div class="field-control-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1.5px solid #bae6fd; padding-bottom: 6px;">
+              <span style="font-weight: 900; font-size: 0.92rem; color: #0369a1;">🎯 Control en Campo (Operador & Chequeador)</span>
+              <span class="badge-offline" style="background:#0284c7; font-size:0.72rem;">Fórmula en Vivo</span>
+            </div>
+
+            <div class="field-control-grid">
+              <div class="field-control-item">
+                <div style="font-size: 0.72rem; font-weight: 800; color: #64748b;">Baldadas / Pases por Camión:</div>
+                <div style="font-family: var(--font-mono); font-size: 1.45rem; font-weight: 900; color: #0f172a;" id="mach-truck-passes">0</div>
+                <small style="font-size: 0.70rem; color: #0284c7; font-weight: 700;">Capacidad / (Q * K)</small>
+              </div>
+
+              <div class="field-control-item">
+                <div style="font-size: 0.72rem; font-weight: 800; color: #64748b;">Tiempo Cargue / Volqueta:</div>
+                <div style="font-family: var(--font-mono); font-size: 1.45rem; font-weight: 900; color: #0f172a;" id="mach-truck-load-time">0.0 min</div>
+                <small style="font-size: 0.70rem; color: #16a34a; font-weight: 700;">Minutos por camión</small>
+              </div>
+
+              <div class="field-control-item">
+                <div style="font-size: 0.72rem; font-weight: 800; color: #64748b;">Volquetas Óptimas en Circuito:</div>
+                <div style="font-family: var(--font-mono); font-size: 1.45rem; font-weight: 900; color: #0284c7;" id="mach-truck-fleet-optimal">0</div>
+                <small style="font-size: 0.70rem; color: #64748b;" id="mach-fleet-cycle-desc">Para ciclo de 25 min</small>
+              </div>
+            </div>
+            <div style="font-size: 0.72rem; color: #475569; margin-top: 6px;">
+              💡 <em>Regla de oro:</em> El chequeador en tolva cuenta las baldadas colmadas y el reloj de cargue para evitar sobrecarga o camiones ociosos.
+            </div>
+          </div>
+
         </div>
 
       </section>

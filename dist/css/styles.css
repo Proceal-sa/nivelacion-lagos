@@ -1,0 +1,1021 @@
+/* ============================================================
+   TopoPiscícola Pro - Estilos de Alto Contraste para Exteriores
+   Diseñado para celulares bajo sol directo en campo
+   ============================================================ */
+
+:root {
+  /* Paleta Modo Sol Directo (Ultra Alto Contraste) */
+  --bg-main: #f0f2f5;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
+  --border-strong: #111827;
+  --border-subtle: #9ca3af;
+  --text-main: #000000;
+  --text-muted: #374151;
+  --text-inverse: #ffffff;
+
+  /* Colores de Señalización Topográfica de Alta Luminancia */
+  --corte-bg: #ffe5e5;
+  --corte-border: #b91c1c;
+  --corte-text: #991b1b;
+  --corte-solid: #dc2626;
+
+  --relleno-bg: #e0f2fe;
+  --relleno-border: #0369a1;
+  --relleno-text: #075985;
+  --relleno-solid: #0284c7;
+
+  --nivel-bg: #dcfce7;
+  --nivel-border: #15803d;
+  --nivel-text: #166534;
+  --nivel-solid: #16a34a;
+
+  --caja-bg: #fef3c7;
+  --caja-border: #b45309;
+  --caja-text: #78350f;
+  --caja-solid: #f59e0b;
+
+  --alerta-bg: #ffedd5;
+  --alerta-border: #c2410c;
+  --alerta-text: #9a3412;
+
+  --primary: #0a2540;
+  --primary-accent: #0284c7;
+  --btn-active: #e2e8f0;
+  --touch-target-min: 52px;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", "Roboto Mono", Consolas, monospace;
+  --shadow-card: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+/* Modo Noche / Sombra */
+body.dark-mode {
+  --bg-main: #0b1120;
+  --bg-surface: #1e293b;
+  --bg-surface-elevated: #334155;
+  --border-strong: #cbd5e1;
+  --border-subtle: #475569;
+  --text-main: #f8fafc;
+  --text-muted: #cbd5e1;
+  --text-inverse: #0f172a;
+
+  --corte-bg: #450a0a;
+  --corte-border: #f87171;
+  --corte-text: #fecaca;
+  --corte-solid: #ef4444;
+
+  --relleno-bg: #082f49;
+  --relleno-border: #38bdf8;
+  --relleno-text: #bae6fd;
+  --relleno-solid: #38bdf8;
+
+  --nivel-bg: #052e16;
+  --nivel-border: #4ade80;
+  --nivel-text: #bbf7d0;
+  --nivel-solid: #22c55e;
+
+  --caja-bg: #451a03;
+  --caja-border: #fbbf24;
+  --caja-text: #fde68a;
+  --caja-solid: #fbbf24;
+
+  --alerta-bg: #431407;
+  --alerta-border: #fb923c;
+  --alerta-text: #fed7aa;
+
+  --primary: #38bdf8;
+  --primary-accent: #0284c7;
+  --btn-active: #475569;
+  --shadow-card: 0 2px 6px rgba(0,0,0,0.6);
+}
+
+/* Reset y base */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  font-family: var(--font-family);
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 900px;
+  margin: 0 auto;
+  position: relative;
+  background-color: var(--bg-surface);
+}
+
+/* Header & Banner Superior */
+.app-header {
+  background-color: var(--primary);
+  color: #ffffff;
+  padding: 10px 14px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 3px solid #000000;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.brand-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 2px solid #ffffff;
+  background-color: #ffffff;
+}
+
+.brand-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.brand-subtitle {
+  font-size: 0.75rem;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge-offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #10b981;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  border: 1px solid #ffffff;
+  text-transform: uppercase;
+}
+
+.icon-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 2px solid #ffffff;
+  color: #ffffff;
+  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Barra de Estado Rápido de Estación / HI */
+.station-banner {
+  background-color: #fef08a;
+  color: #713f12;
+  border-bottom: 2px solid #ca8a04;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+body.dark-mode .station-banner {
+  background-color: #854d0e;
+  color: #fef08a;
+  border-bottom-color: #a16207;
+}
+
+.hi-display-box {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.hi-val {
+  font-family: var(--font-mono);
+  font-size: 1.18rem;
+  font-weight: 900;
+  color: #000000;
+  background: #ffffff;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1.5px solid #000;
+}
+
+body.dark-mode .hi-val {
+  background: #1e293b;
+  color: #38bdf8;
+  border-color: #38bdf8;
+}
+
+/* Navegación por Pestañas (Mobile First) */
+.tab-nav {
+  display: flex;
+  overflow-x: auto;
+  background-color: var(--bg-surface);
+  border-bottom: 3px solid var(--border-strong);
+  scrollbar-width: none;
+  position: sticky;
+  top: 58px;
+  z-index: 40;
+}
+
+.tab-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-btn {
+  flex: 1;
+  min-width: 80px;
+  min-height: var(--touch-target-min);
+  padding: 8px 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  border-bottom: 4px solid transparent;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tab-btn .tab-icon {
+  font-size: 1.25rem;
+}
+
+.tab-btn.active {
+  color: var(--text-main);
+  background-color: var(--bg-main);
+  border-bottom-color: var(--primary-accent);
+  font-weight: 900;
+}
+
+/* Contenido Principal */
+.main-content {
+  flex: 1;
+  padding: 12px;
+  padding-bottom: max(80px, calc(80px + env(safe-area-inset-bottom)));
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+/* Tarjetas y Formularios */
+.card {
+  background-color: var(--bg-surface-elevated);
+  border: 2px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-card);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border-subtle);
+}
+
+.card-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Grupos de Formulario y Campos */
+.form-group {
+  margin-bottom: 12px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.form-help {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.form-control, .form-select {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 2px solid var(--border-strong);
+  background-color: var(--bg-surface);
+  color: var(--text-main);
+}
+
+.form-control:focus, .form-select:focus {
+  outline: 3px solid var(--primary-accent);
+  outline-offset: 1px;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.form-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+/* Botones Grandes de Campo */
+.btn {
+  min-height: var(--touch-target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: 2px solid var(--border-strong);
+  transition: transform 0.1s ease, background 0.15s ease;
+  text-decoration: none;
+  text-align: center;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: #ffffff;
+  border-color: #000000;
+}
+
+.btn-accent {
+  background-color: var(--primary-accent);
+  color: #ffffff;
+  border-color: #000000;
+}
+
+.btn-success {
+  background-color: var(--nivel-solid);
+  color: #ffffff;
+  border-color: #000000;
+}
+
+.btn-warning {
+  background-color: var(--caja-solid);
+  color: #000000;
+  border-color: #000000;
+}
+
+.btn-danger {
+  background-color: var(--corte-solid);
+  color: #ffffff;
+  border-color: #000000;
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--text-main);
+  border: 2px solid var(--border-strong);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ============================================================
+   SECCIÓN CUADRÍCULA VISUAL DE ESTACAS
+   ============================================================ */
+
+.grid-wrapper {
+  overflow: auto;
+  border: 2px solid var(--border-strong);
+  border-radius: 10px;
+  background-color: #f8fafc;
+  padding: 8px;
+  margin-bottom: 12px;
+  max-height: 60vh;
+  position: relative;
+}
+
+body.dark-mode .grid-wrapper {
+  background-color: #0f172a;
+}
+
+.lake-grid-table {
+  border-collapse: separate;
+  border-spacing: 6px;
+  margin: 0 auto;
+}
+
+.stake-header-cell {
+  background: var(--bg-surface-elevated);
+  border: 2px solid var(--border-strong);
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 4px 6px;
+  border-radius: 6px;
+  min-width: 32px;
+}
+
+.stake-cell {
+  min-width: 72px;
+  height: 68px;
+  border: 2.5px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 4px;
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  user-select: none;
+}
+
+.stake-cell:active {
+  transform: scale(0.94);
+}
+
+.stake-code {
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.stake-design-val {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.stake-diff-val {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  font-weight: 900;
+  margin-top: 2px;
+}
+
+/* Estados de Celda de Estaca */
+.stake-cell.unmeasured {
+  background-color: #ffffff;
+  color: #1f2937;
+  border-style: dashed;
+}
+
+body.dark-mode .stake-cell.unmeasured {
+  background-color: #1e293b;
+  color: #cbd5e1;
+}
+
+.stake-cell.corte {
+  background-color: var(--corte-bg);
+  border-color: var(--corte-border);
+  color: var(--corte-text);
+}
+
+.stake-cell.relleno {
+  background-color: var(--relleno-bg);
+  border-color: var(--relleno-border);
+  color: var(--relleno-text);
+}
+
+.stake-cell.a-nivel {
+  background-color: var(--nivel-bg);
+  border-color: var(--nivel-border);
+  color: var(--nivel-text);
+}
+
+.stake-cell.is-caja {
+  outline: 3.5px solid #d97706;
+  outline-offset: 1px;
+}
+
+.stake-cell.is-caja::after {
+  content: "★ CAJA";
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  background-color: #d97706;
+  color: #ffffff;
+  font-size: 0.58rem;
+  font-weight: 900;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid #000;
+}
+
+.stake-cell.has-warning {
+  border-color: #dc2626 !important;
+  animation: pulse-warning 1.8s infinite;
+}
+
+.stake-cell.has-warning::before {
+  content: "⚠️ CHARCO";
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #dc2626;
+  color: #ffffff;
+  font-size: 0.55rem;
+  font-weight: 900;
+  padding: 1px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  border: 1px solid #000;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+  50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+/* Leyenda de la Cuadrícula */
+.grid-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-strong);
+}
+
+/* ============================================================
+   MODAL DE ENTRADA Y TECLADO TÁCTIL GRANDE (CADENERO EN CAMPO)
+   ============================================================ */
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+  padding: 0;
+}
+
+.modal-backdrop.open {
+  display: flex;
+}
+
+.modal-sheet {
+  background-color: var(--bg-surface);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  border: 3px solid var(--border-strong);
+  border-bottom: none;
+  width: 100%;
+  max-width: 600px;
+  max-height: 94vh;
+  overflow-y: auto;
+  padding: 14px 16px;
+  padding-bottom: max(16px, calc(16px + env(safe-area-inset-bottom)));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.modal-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.modal-stake-title {
+  font-size: 1.4rem;
+  font-weight: 900;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.modal-nav-btns {
+  display: flex;
+  gap: 6px;
+}
+
+/* Cuadros de lectura y cálculo instantáneo */
+.reading-display-box {
+  background-color: #000000;
+  color: #00ff88;
+  border: 3px solid #000;
+  border-radius: 12px;
+  padding: 10px 14px;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.reading-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #a7f3d0;
+  text-align: left;
+  margin-bottom: 2px;
+}
+
+.reading-digits {
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  line-height: 1;
+}
+
+/* Panel de Resultados Topográficos en Vivo */
+.live-results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.result-card {
+  padding: 8px 10px;
+  border: 2px solid var(--border-strong);
+  border-radius: 10px;
+  background-color: var(--bg-surface-elevated);
+}
+
+.result-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.result-val {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+/* Banner de Estado en Vivo (Corte / Relleno / Nivel) */
+.live-status-badge {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 3px solid var(--border-strong);
+  font-size: 1.25rem;
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.live-status-badge.corte {
+  background-color: var(--corte-solid);
+  color: #ffffff;
+}
+
+.live-status-badge.relleno {
+  background-color: var(--relleno-solid);
+  color: #ffffff;
+}
+
+.live-status-badge.a-nivel {
+  background-color: var(--nivel-solid);
+  color: #ffffff;
+}
+
+.live-status-badge.pendiente {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+/* Lectura Ideal de Mira */
+.ideal-reading-banner {
+  background-color: #fef9c3;
+  color: #713f12;
+  border: 2px dashed #ca8a04;
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+body.dark-mode .ideal-reading-banner {
+  background-color: #422006;
+  color: #fef08a;
+  border-color: #a16207;
+}
+
+.ideal-reading-val {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #000;
+  background: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #ca8a04;
+}
+
+body.dark-mode .ideal-reading-val {
+  background: #1e293b;
+  color: #fde047;
+}
+
+/* TECLADO NUMÉRICO TÁCTIL GRANDE */
+.virtual-keypad {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.keypad-btn {
+  min-height: 58px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  border: 2.5px solid var(--border-strong);
+  border-radius: 12px;
+  background-color: var(--bg-surface);
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--border-strong);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.keypad-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--border-strong);
+  background-color: var(--btn-active);
+}
+
+.keypad-btn.action-btn {
+  font-size: 1.1rem;
+  font-weight: 800;
+  background-color: #f3f4f6;
+}
+
+body.dark-mode .keypad-btn.action-btn {
+  background-color: #334155;
+}
+
+.keypad-btn.accent-btn {
+  background-color: var(--primary-accent);
+  color: #ffffff;
+}
+
+.keypad-btn.save-btn {
+  grid-column: span 2;
+  background-color: var(--nivel-solid);
+  color: #ffffff;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+/* ============================================================
+   TABLA DE ARISTAS / HISTORIAL DE ARMADAS Y PUNTOS DE CAMBIO
+   ============================================================ */
+
+.data-table-wrapper {
+  overflow-x: auto;
+  border: 2px solid var(--border-strong);
+  border-radius: 10px;
+  background-color: var(--bg-surface);
+  margin-bottom: 12px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.data-table th {
+  background-color: var(--primary);
+  color: #ffffff;
+  padding: 8px 10px;
+  font-weight: 800;
+  border-bottom: 2px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.data-table tr.active-row {
+  background-color: #fef08a !important;
+  color: #000000;
+  font-weight: 800;
+}
+
+body.dark-mode .data-table tr.active-row {
+  background-color: #854d0e !important;
+  color: #ffffff;
+}
+
+.mono-num {
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+
+/* Alertas y Notificaciones */
+.alert-box {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 2px solid var(--border-strong);
+  margin-bottom: 12px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.alert-warning {
+  background-color: var(--alerta-bg);
+  border-color: var(--alerta-border);
+  color: var(--alerta-text);
+}
+
+.alert-danger {
+  background-color: var(--corte-bg);
+  border-color: var(--corte-border);
+  color: var(--corte-text);
+}
+
+.alert-success {
+  background-color: var(--nivel-bg);
+  border-color: var(--nivel-border);
+  color: var(--nivel-text);
+}
+
+/* Resumen de Volúmenes y Corte/Relleno */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.summary-card {
+  border: 2px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+  background-color: var(--bg-surface-elevated);
+}
+
+.summary-card.corte {
+  border-color: var(--corte-border);
+  background-color: var(--corte-bg);
+  color: var(--corte-text);
+}
+
+.summary-card.relleno {
+  border-color: var(--relleno-border);
+  background-color: var(--relleno-bg);
+  color: var(--relleno-text);
+}
+
+.summary-card.balance {
+  border-color: var(--primary);
+  background-color: #f8fafc;
+}
+
+body.dark-mode .summary-card.balance {
+  background-color: #1e293b;
+}
+
+.summary-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.summary-value {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 900;
+  margin-top: 2px;
+}
+
+/* Diálogo de edición manual de Cota Diseño */
+.custom-design-badge {
+  font-size: 0.65rem;
+  background: #f59e0b;
+  color: #000;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 800;
+  margin-left: 4px;
+}
+
+/* Media queries para optimización en smartphones */
+@media (max-width: 480px) {
+  .brand-title {
+    font-size: 1rem;
+  }
+  .stake-cell {
+    min-width: 62px;
+    height: 60px;
+  }
+  .stake-code {
+    font-size: 0.8rem;
+  }
+  .keypad-btn {
+    min-height: 52px;
+    font-size: 1.35rem;
+  }
+  .reading-digits {
+    font-size: 1.9rem;
+  }
+}

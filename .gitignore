@@ -1,0 +1,9 @@
+# Scripts de desarrollo locales
+generate-png-icons.js
+test-topo.js
+verify-pwa-dist.js
+build-dist.js
+
+# OS files
+Thumbs.db
+.DS_Store

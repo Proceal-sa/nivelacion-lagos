@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>TopoPiscícola Pro | Nivelación de Lagos</title>
+  <meta name="description" content="PWA 100% offline para topografía, nivelación de fondo de lagos piscícolas y control de pendientes hacia caja de pesca.">
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="./manifest.json">
+
+  <!-- Colores de tema Android & Chrome -->
+  <meta name="theme-color" content="#0a2540">
+  <meta name="theme-color" content="#0a2540" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1120" media="(prefers-color-scheme: dark)">
+
+  <!-- Requisitos de Instalación Universal Android -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="TopoLago">
+
+  <!-- Requisitos de Instalación Universal Apple / iPhone iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TopoLago">
+  <link rel="apple-touch-icon" href="./icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="./icons/icon-512.png">
+
+  <!-- Favicons estándar -->
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+  
+  <!-- CSS Principal de Alto Contraste -->
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+  <div id="app-container">
+    
+    <!-- Header Superior -->
+    <header class="app-header">
+      <div class="brand-wrapper">
+        <img src="./icons/icon.svg" alt="Logo" class="app-logo">
+        <div>
+          <h1 class="brand-title">TopoPiscícola Pro</h1>
+          <div class="brand-subtitle" id="header-pond-name">Lago: Sin Proyecto</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="badge-offline" id="offline-badge" title="App 100% Offline con IndexedDB">
+          ⚡ 100% Offline
+        </span>
+        <button id="btn-toggle-theme" class="icon-btn" title="Alternar Modo Sol / Noche" aria-label="Modo Sol / Noche">
+          ☀️
+        </button>
+      </div>
+    </header>
+
+    <!-- Barra de Estado Rápido de Instrumento (HI) -->
+    <div class="station-banner">
+      <div>
+        <span id="banner-station-name">📍 Armada: Sin Definir</span>
+      </div>
+      <div class="hi-display-box">
+        <span>HI:</span>
+        <span class="hi-val" id="banner-hi-val">---.--- m</span>
+      </div>
+    </div>
+
+    <!-- Navegación de Pestañas Móvil -->
+    <nav class="tab-nav" role="tablist">
+      <button class="tab-btn active" data-tab="tab-grid" role="tab">
+        <span class="tab-icon">📐</span>
+        <span>Cuadrícula</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-config" role="tab">
+        <span class="tab-icon">⚙️</span>
+        <span>Config Lago</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-station" role="tab">
+        <span class="tab-icon">🔭</span>
+        <span>Armada & PC</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-aux" role="tab">
+        <span class="tab-icon">📍</span>
+        <span>Ptos Libres</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-export" role="tab">
+        <span class="tab-icon">📊</span>
+        <span>Cartera & CSV</span>
+      </button>
+    </nav>
+
+    <!-- Contenido Principal -->
+    <main class="main-content">
+
+      <!-- ==========================================
+           TAB 1: CUADRÍCULA VISUAL Y TOMA DE MIRA
+           ========================================== -->
+      <section id="tab-grid" class="tab-pane active">
+        
+        <!-- Alerta de advertencia de charcos / contrapendiente si existe -->
+        <div id="puddle-global-alert" class="alert-box alert-danger" style="display: none;">
+          <span style="font-size: 1.3rem;">⚠️</span>
+          <div>
+            <strong>¡Alerta de Drenaje / Contrapendiente detectada!</strong>
+            <p id="puddle-alert-desc">Hay estacas que retienen agua rumbo a la caja de pesca.</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 8px; padding: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+            <div>
+              <span style="font-weight: 800; font-size: 0.9rem;" id="grid-progress-text">Medidas: 0 / 0 (0%)</span>
+              <div style="font-size: 0.75rem; color: var(--text-muted);" id="grid-tol-text">Tolerancia: ±2 cm</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <button id="btn-quick-pc" class="btn btn-warning" style="min-height: 38px; padding: 6px 12px; font-size: 0.85rem;">
+                + Punto Cambio (PC)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contenedor scrolleable de la malla de estacas -->
+        <div class="grid-wrapper" id="lake-grid-container">
+          <table class="lake-grid-table" id="lake-grid-table">
+            <!-- Generado dinámicamente -->
+          </table>
+        </div>
+
+        <!-- Leyenda de colores -->
+        <div class="grid-legend">
+          <div class="legend-item" style="background: var(--caja-bg); border-color: var(--caja-border); color: var(--caja-text);">
+            <span>★</span> Caja Pesca (Salida)
+          </div>
+          <div class="legend-item" style="background: var(--nivel-bg); border-color: var(--nivel-border); color: var(--nivel-text);">
+            <span>✔</span> A Nivel (±Tol)
+          </div>
+          <div class="legend-item" style="background: var(--corte-bg); border-color: var(--corte-border); color: var(--corte-text);">
+            <span>▼</span> Corte (Excavar)
+          </div>
+          <div class="legend-item" style="background: var(--relleno-bg); border-color: var(--relleno-border); color: var(--relleno-text);">
+            <span>▲</span> Relleno (Añadir)
+          </div>
+          <div class="legend-item" style="background: #fff; border-style: dashed;">
+            <span>○</span> Sin Medir
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           TAB 2: CONFIGURACIÓN DEL LAGO Y LA MALLA
+           ========================================== -->
+      <section id="tab-config" class="tab-pane">
+        
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">🐟 Geometría del Lago y Cuadrícula</h2>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfg-pond-name">Nombre del Lago / Piscina:</label>
+            <input type="text" id="cfg-pond-name" class="form-control" value="Lago Piscícola 1 - Tilapia" placeholder="Ej. Lago Engorde 01">
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="cfg-rows">Filas (Letras A, B...):</label>
+              <input type="number" id="cfg-rows" class="form-control" min="2" max="26" value="5">
+              <div class="form-help">Máx 26 filas (A..Z)</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="cfg-cols">Columnas (1, 2...):</label>
+              <input type="number" id="cfg-cols" class="form-control" min="2" max="50" value="8">
+              <div class="form-help">Ej. 8 columnas</div>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="cfg-dx">Espaciado X (m):</label>
+              <input type="number" id="cfg-dx" class="form-control" step="0.5" min="1" value="10.0">
+              <div class="form-help">Distancia entre columnas</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="cfg-dy">Espaciado Y (m):</label>
+              <input type="number" id="cfg-dy" class="form-control" step="0.5" min="1" value="10.0">
+              <div class="form-help">Distancia entre filas</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">🚰 Caja de Pesca / Desagüe (Punto Más Bajo)</h2>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="cfg-box-row">Fila de la Caja:</label>
+              <select id="cfg-box-row" class="form-select">
+                <!-- Generado dinámicamente -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="cfg-box-col">Columna de la Caja:</label>
+              <select id="cfg-box-col" class="form-select">
+                <!-- Generado dinámicamente -->
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfg-box-elev">Cota Base de Diseño en Caja (m):</label>
+            <input type="number" id="cfg-box-elev" class="form-control" step="0.001" value="100.000">
+            <div class="form-help">Cota mínima absoluta del piso del lago (ej. 100.000 msnm o relativa)</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📐 Modo de Pendiente de Rasante</h2>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Estrategia de Drenaje hacia la Caja:</label>
+            <select id="cfg-slope-mode" class="form-select">
+              <option value="orthogonal">(A) Doble Pendiente Ortogonal (Longitudinal + Transversal a canal)</option>
+              <option value="radial">(B) Pendiente Radial Directa (Euclidiana hacia la caja)</option>
+            </select>
+          </div>
+
+          <!-- Campos para Modo Ortogonal -->
+          <div id="cfg-orthogonal-fields">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="form-label" for="cfg-slope-x">% Pendiente Long. (X):</label>
+                <input type="number" id="cfg-slope-x" class="form-control" step="0.05" min="0" value="0.50">
+                <div class="form-help">% hacia columna de caja</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="cfg-slope-y">% Pendiente Transv. (Y):</label>
+                <input type="number" id="cfg-slope-y" class="form-control" step="0.05" min="0" value="0.80">
+                <div class="form-help">% hacia fila del canal/caja</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Campos para Modo Radial -->
+          <div id="cfg-radial-fields" style="display: none;">
+            <div class="form-group">
+              <label class="form-label" for="cfg-slope-radial">% Pendiente Radial Directa:</label>
+              <input type="number" id="cfg-slope-radial" class="form-control" step="0.05" min="0" value="0.60">
+              <div class="form-help">% uniforme según distancia directa a la caja</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfg-tolerance">Tolerancia para 'A NIVEL' (cm):</label>
+            <input type="number" id="cfg-tolerance" class="form-control" step="0.5" min="0.5" max="10" value="2.0">
+            <div class="form-help">Ej. ±2.0 cm (las cotas dentro de este margen se marcan verdes)</div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button id="btn-save-config" class="btn btn-primary btn-block">
+              💾 Guardar Configuración y Recalcular Rasantes
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==========================================
+           TAB 3: ARMADA Y PUNTOS DE CAMBIO (PC)
+           ========================================== -->
+      <section id="tab-station" class="tab-pane">
+        
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">🔭 Nueva Armada / Estación de Nivel</h2>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="st-bm-name">Referencia / Punto Visado:</label>
+            <input type="text" id="st-bm-name" class="form-control" value="BM-1 (Perno Dique)" placeholder="Ej. BM-1, Mojón Entrada">
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="st-bm-elev">Cota del BM (m):</label>
+              <input type="number" id="st-bm-elev" class="form-control" step="0.001" value="102.000">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="st-backsight">Vista Atrás V+ (m):</label>
+              <input type="number" id="st-backsight" class="form-control" step="0.001" placeholder="Ej. 1.450" value="1.350">
+            </div>
+          </div>
+
+          <div class="alert-box alert-success" style="margin-top: 8px;">
+            <div>
+              <strong>Altura Instrumental Calculada:</strong>
+              <div style="font-family: var(--font-mono); font-size: 1.35rem; font-weight: 900;" id="st-calculated-hi">
+                HI = 103.350 m
+              </div>
+              <small>Fórmula: HI = Cota BM + Vista Atrás (V+)</small>
+            </div>
+          </div>
+
+          <button id="btn-save-new-station" class="btn btn-success btn-block" style="margin-top: 8px;">
+            ✔ Activar Esta Armada de Nivel
+          </button>
+        </div>
+
+        <!-- Botón destacado de Punto de Cambio (PC) -->
+        <div class="card" style="border-color: #ca8a04; background-color: #fffbeb;">
+          <div class="card-header" style="border-bottom-color: #ca8a04;">
+            <h2 class="card-title" style="color: #854d0e;">🔄 Cambio de Posición del Nivel (PC)</h2>
+          </div>
+          <p style="font-size: 0.88rem; font-weight: 600; color: #713f12; margin-bottom: 10px;">
+            Use este flujo asistido cuando la distancia, taludes o visibilidad requieran trasladar el trípode del nivel a otra posición sin perder la cota.
+          </p>
+          <button id="btn-open-pc-modal" class="btn btn-warning btn-block" style="font-size: 1.1rem; padding: 14px;">
+            ⚡ Abrir Asistente de Punto de Cambio (PC)
+          </button>
+        </div>
+
+        <!-- Historial de Armadas Registradas -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📜 Historial de Armadas de Nivel</h2>
+          </div>
+          <div class="data-table-wrapper">
+            <table class="data-table" id="stations-table">
+              <thead>
+                <tr>
+                  <th>Estado</th>
+                  <th>Armada</th>
+                  <th>Pto Visado</th>
+                  <th>Cota Ref (m)</th>
+                  <th>V+ (m)</th>
+                  <th>HI (m)</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="stations-table-body">
+                <!-- Generado dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==========================================
+           TAB 4: PUNTOS LIBRES / AUXILIARES
+           ========================================== -->
+      <section id="tab-aux" class="tab-pane">
+        
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📌 Registrar Punto Fuera de Malla</h2>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">
+            Ideal para controlar bordes de taludes, préstamos, fondo de tubería de llenado, fondo de la caja de cosecha o corona de berma.
+          </p>
+
+          <div class="form-group">
+            <label class="form-label" for="aux-point-name">Descripción del Punto:</label>
+            <input type="text" id="aux-point-name" class="form-control" placeholder="Ej. Borde Talud Norte, Tubería 12in">
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="aux-reading">Lectura de Mira VI (m):</label>
+              <input type="number" id="aux-reading" class="form-control" step="0.001" placeholder="Ej. 1.825">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="aux-design">Cota Teórica (Opcional):</label>
+              <input type="number" id="aux-design" class="form-control" step="0.001" placeholder="Ej. 101.500">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="aux-note">Observaciones de Campo:</label>
+            <input type="text" id="aux-note" class="form-control" placeholder="Ej. Arcilla dura, presencia de grava">
+          </div>
+
+          <button id="btn-save-aux-point" class="btn btn-accent btn-block">
+            ➕ Guardar Punto Auxiliar
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📋 Lista de Puntos Libres Registrados</h2>
+          </div>
+          <div class="data-table-wrapper">
+            <table class="data-table" id="aux-table">
+              <thead>
+                <tr>
+                  <th>Punto</th>
+                  <th>HI Utilizado</th>
+                  <th>Lectura (VI)</th>
+                  <th>Cota Terreno</th>
+                  <th>Cota Teórica</th>
+                  <th>Diferencia</th>
+                  <th>Nota</th>
+                  <th>Eliminar</th>
+                </tr>
+              </thead>
+              <tbody id="aux-table-body">
+                <!-- Generado dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==========================================
+           TAB 5: CARTERA DE CAMPO, DRENAJE Y CSV
+           ========================================== -->
+      <section id="tab-export" class="tab-pane">
+        
+        <!-- Resumen de Movimiento de Tierras Estimado -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">🚜 Balance y Resumen de Nivelación</h2>
+          </div>
+          <div class="summary-grid">
+            <div class="summary-card corte">
+              <div class="summary-label">Corte Estimado</div>
+              <div class="summary-value" id="sum-cut-vol">0.00 m³</div>
+              <small id="sum-cut-stakes">0 estacas</small>
+            </div>
+            <div class="summary-card relleno">
+              <div class="summary-label">Relleno Estimado</div>
+              <div class="summary-value" id="sum-fill-vol">0.00 m³</div>
+              <small id="sum-fill-stakes">0 estacas</small>
+            </div>
+            <div class="summary-card balance">
+              <div class="summary-label">Balance Neto</div>
+              <div class="summary-value" id="sum-balance-vol">0.00 m³</div>
+              <small id="sum-balance-desc">Equilibrado</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exportación Excel / CSV -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📁 Exportar Cartera Topográfica</h2>
+          </div>
+          <p style="font-size: 0.88rem; font-weight: 600; margin-bottom: 12px;">
+            Genera un archivo CSV con formato estándar de libreta topográfica (BOM UTF-8, compatible directo con Microsoft Excel, Civil 3D y LibreOffice).
+          </p>
+
+          <div class="form-grid-2" style="margin-bottom: 12px;">
+            <div class="form-group">
+              <label class="form-label" for="exp-separator">Separador de Columnas:</label>
+              <select id="exp-separator" class="form-select">
+                <option value=";" selected>Punto y coma (;) - Estándar Excel España/Latam</option>
+                <option value=",">Coma (,) - Estándar Internacional</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="exp-decimal">Separador Decimal:</label>
+              <select id="exp-decimal" class="form-select">
+                <option value="," selected>Coma decimal (ej. 100,25)</option>
+                <option value=".">Punto decimal (ej. 100.25)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button id="btn-export-csv" class="btn btn-primary btn-block" style="font-size: 1.1rem; padding: 12px;">
+              📥 Descargar Cartera Completa en CSV (Excel)
+            </button>
+            <button id="btn-export-json-backup" class="btn btn-outline btn-block">
+              💾 Respaldar Proyecto Completo en JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabla Completa de Cartera de Nivelación -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📖 Cartera Topográfica de Campo</h2>
+          </div>
+          <div class="data-table-wrapper">
+            <table class="data-table" id="cartera-table">
+              <thead>
+                <tr>
+                  <th>Estaca</th>
+                  <th>X (m)</th>
+                  <th>Y (m)</th>
+                  <th>Cota Rasante</th>
+                  <th>Lectura (VI)</th>
+                  <th>Cota Terreno</th>
+                  <th>Desbalance</th>
+                  <th>Estado</th>
+                  <th>Alerta Drenaje</th>
+                </tr>
+              </thead>
+              <tbody id="cartera-table-body">
+                <!-- Generado dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- ============================================================
+         MODAL FLOTANTE DE ENTRADA CON TECLADO TÁCTIL GRANDE
+         (Optimizada para dedos mojados, guantes y luz solar directa)
+         ============================================================ -->
+    <div id="modal-stake-input" class="modal-backdrop">
+      <div class="modal-sheet">
+        
+        <!-- Cabecera del Modal -->
+        <div class="modal-header-row">
+          <div class="modal-stake-title">
+            <span>Estaca</span>
+            <span id="m-stake-code" style="color: var(--primary-accent); font-family: var(--font-mono); font-size: 1.6rem;">A-1</span>
+            <span id="m-custom-badge" class="custom-design-badge" style="display:none;">Manual</span>
+          </div>
+          <div class="modal-nav-btns">
+            <button id="m-btn-prev" class="btn btn-outline" style="min-height: 38px; padding: 4px 10px;" title="Estaca Anterior">
+              ◀ Ant
+            </button>
+            <button id="m-btn-next" class="btn btn-outline" style="min-height: 38px; padding: 4px 10px;" title="Siguiente Estaca">
+              Sig ▶
+            </button>
+            <button id="m-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;" title="Cerrar">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- Banner de Lectura Ideal de Mira (Para cantar rápido al cadenero) -->
+        <div class="ideal-reading-banner">
+          <span>📢 LECTURA IDEAL DE MIRA:</span>
+          <span class="ideal-reading-val" id="m-ideal-reading">---.--- m</span>
+        </div>
+
+        <!-- Pantalla de Lectura de Mira Digitada -->
+        <div class="reading-display-box">
+          <div class="reading-label">LECTURA DE MIRA DIGITADA (m):</div>
+          <div class="reading-digits" id="m-reading-display">0.000</div>
+        </div>
+
+        <!-- Tarjetas de Resultados en Vivo -->
+        <div class="live-results-grid">
+          <div class="result-card">
+            <div class="result-label">Cota Rasante (Diseño):</div>
+            <div class="result-val" id="m-res-design">100.000 m</div>
+          </div>
+          <div class="result-card">
+            <div class="result-label">Cota Terreno Medida:</div>
+            <div class="result-val" id="m-res-ground">---.--- m</div>
+          </div>
+        </div>
+
+        <!-- Gran Banner de Corte / Relleno / A Nivel -->
+        <div class="live-status-badge pendiente" id="m-live-status-badge">
+          DIGITE LA LECTURA
+        </div>
+
+        <!-- Alerta de contrapendiente específica si aplica -->
+        <div id="m-puddle-note" class="alert-box alert-danger" style="display: none; padding: 6px 10px; font-size: 0.8rem;">
+          ⚠️ <strong>Contrapendiente:</strong> <span id="m-puddle-desc"></span>
+        </div>
+
+        <!-- Botones de Utilidad Rápida de la Estaca -->
+        <div style="display: flex; gap: 6px; justify-content: space-between;">
+          <button id="m-btn-edit-design" class="btn btn-outline" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;">
+            ✏️ Modificar Rasante
+          </button>
+          <button id="m-btn-add-note" class="btn btn-outline" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;">
+            📝 Nota de Campo
+          </button>
+        </div>
+
+        <!-- TECLADO NUMÉRICO TÁCTIL GRANDE -->
+        <div class="virtual-keypad">
+          <button class="keypad-btn" data-key="7">7</button>
+          <button class="keypad-btn" data-key="8">8</button>
+          <button class="keypad-btn" data-key="9">9</button>
+          <button class="keypad-btn action-btn" data-key="backspace" title="Borrar último dígito">⌫</button>
+
+          <button class="keypad-btn" data-key="4">4</button>
+          <button class="keypad-btn" data-key="5">5</button>
+          <button class="keypad-btn" data-key="6">6</button>
+          <button class="keypad-btn action-btn" data-key="clear" title="Limpiar lectura">C</button>
+
+          <button class="keypad-btn" data-key="1">1</button>
+          <button class="keypad-btn" data-key="2">2</button>
+          <button class="keypad-btn" data-key="3">3</button>
+          <button class="keypad-btn action-btn" data-key="+0.01" title="Sumar 1 cm">+1cm</button>
+
+          <button class="keypad-btn" data-key="0">0</button>
+          <button class="keypad-btn" data-key="." style="font-size: 2rem;">.</button>
+          <button class="keypad-btn action-btn" data-key="-0.01" title="Restar 1 cm">-1cm</button>
+          <button class="keypad-btn action-btn" data-key="delete-reading" style="font-size: 0.85rem; color: #dc2626;" title="Eliminar Medición">🗑️</button>
+
+          <button class="keypad-btn save-btn" data-key="save-next" id="m-btn-save-next">
+            ✔ Guardar & Sig ❯
+          </button>
+          <button class="keypad-btn accent-btn" style="grid-column: span 2;" data-key="save-stay">
+            💾 Guardar
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ============================================================
+         MODAL DE ASISTENTE DE PUNTO DE CAMBIO (PC)
+         ============================================================ -->
+    <div id="modal-pc-assistant" class="modal-backdrop">
+      <div class="modal-sheet">
+        <div class="modal-header-row">
+          <div class="modal-stake-title" style="color: #b45309;">
+            🔄 Punto de Cambio (PC)
+          </div>
+          <button id="pc-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;">
+            ✕
+          </button>
+        </div>
+
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+          Mueve el nivel topográfico a una nueva estación sin perder el hilo de cotas.
+        </p>
+
+        <!-- Paso 1: Vista Adelante -->
+        <div class="card" style="margin-bottom: 8px;">
+          <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 6px; color: #0284c7;">
+            Paso 1: Lectura Vista Adelante (V-) en el PC
+          </div>
+          <p style="font-size: 0.78rem; margin-bottom: 6px;">
+            El cadenero ubica la mira en una estaca firme o punto fijo (PC). Desde la posición actual del nivel con <strong id="pc-current-hi-desc">HI = ---</strong>, tome la lectura V-:
+          </p>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="pc-foresight">Vista Adelante V- (m):</label>
+              <input type="number" id="pc-foresight" class="form-control" step="0.001" placeholder="Ej. 1.542">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cota Resultante del PC:</label>
+              <div class="form-control" id="pc-calculated-ground" style="background:#f1f5f9; font-family: var(--font-mono); font-weight: 900;">
+                ---.--- m
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Paso 2: Traslado y Vista Atrás -->
+        <div class="card" style="margin-bottom: 8px;">
+          <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 6px; color: #16a34a;">
+            Paso 2: Mover el Trípode y Tomar Vista Atrás (V+)
+          </div>
+          <p style="font-size: 0.78rem; margin-bottom: 6px;">
+            Traslade el nivel al nuevo sitio. El cadenero NO se mueve del PC. Vise nuevamente la mira sobre el mismo PC:
+          </p>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label" for="pc-backsight">Nueva Vista Atrás V+ (m):</label>
+              <input type="number" id="pc-backsight" class="form-control" step="0.001" placeholder="Ej. 1.215">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nueva Altura Instrumental:</label>
+              <div class="form-control" id="pc-new-hi" style="background:#dcfce7; color:#15803d; font-family: var(--font-mono); font-weight: 900;">
+                ---.--- m
+              </div>
+            </div>
+          </div>
+          <div class="form-group" style="margin-top: 6px;">
+            <label class="form-label" for="pc-station-name">Nombre de la Nueva Armada:</label>
+            <input type="text" id="pc-station-name" class="form-control" value="Armada 2 (PC-1)">
+          </div>
+        </div>
+
+        <button id="pc-btn-save-confirm" class="btn btn-success btn-block" style="padding: 12px; font-size: 1.1rem;">
+          ✔ Confirmar y Cambiar a Nueva Armada
+        </button>
+
+      </div>
+    </div>
+
+    <!-- ============================================================
+         MODAL DE MODIFICACIÓN MANUAL DE COTA DE DISEÑO DE UN NODO
+         ============================================================ -->
+    <div id="modal-edit-design" class="modal-backdrop">
+      <div class="modal-sheet" style="max-width: 450px;">
+        <div class="modal-header-row">
+          <div class="modal-stake-title">
+            ✏️ Cota Diseño: <span id="ed-stake-code">A-1</span>
+          </div>
+          <button id="ed-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;">✕</button>
+        </div>
+
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin: 6px 0;">
+          Permite personalizar la rasante de este nodo en particular (ej. canaleta más honda, rampa de acceso o zona especial).
+        </p>
+
+        <div class="form-group">
+          <label class="form-label" for="ed-input-elevation">Nueva Cota Diseño (m):</label>
+          <input type="number" id="ed-input-elevation" class="form-control" step="0.001">
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button id="ed-btn-save" class="btn btn-primary btn-block">Guardar Manual</button>
+          <button id="ed-btn-reset" class="btn btn-outline btn-block">Restablecer Teórica</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="./js/db.js"></script>
+  <script src="./js/topo-math.js"></script>
+  <script src="./js/app.js"></script>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => console.log('SW registrado correctamente:', reg.scope))
+          .catch((err) => console.error('Fallo en registro SW:', err));
+      });
+    }
+  </script>
+</body>
+</html>

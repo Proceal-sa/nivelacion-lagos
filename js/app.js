@@ -1732,7 +1732,6 @@
       dom.machFleetCycleDesc.textContent = `Para ciclo de ${tiempoViajeBotaderoMin} min botadero`;
     }
   }
-  }
 
   // --- 7. PESTAÑA CARTERA TOPOGRÁFICA Y EXPORTACIÓN ---
   function renderExportTab() {

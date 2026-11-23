@@ -40,6 +40,7 @@
     dom.puddleGlobalAlert = document.getElementById('puddle-global-alert');
     dom.puddleAlertDesc = document.getElementById('puddle-alert-desc');
     dom.btnQuickPC = document.getElementById('btn-quick-pc');
+    dom.btnQuickOffset = document.getElementById('btn-quick-offset');
 
     // Tab Configuración
     dom.cfgPondName = document.getElementById('cfg-pond-name');
@@ -103,9 +104,29 @@
     dom.mLiveStatusBadge = document.getElementById('m-live-status-badge');
     dom.mPuddleNote = document.getElementById('m-puddle-note');
     dom.mPuddleDesc = document.getElementById('m-puddle-desc');
+    dom.mBtnOffset = document.getElementById('m-btn-offset');
     dom.mBtnEditDesign = document.getElementById('m-btn-edit-design');
     dom.mBtnAddNote = document.getElementById('m-btn-add-note');
     dom.virtualKeypad = document.querySelector('.virtual-keypad');
+
+    // Modal Punto Intermedio (Desfase)
+    dom.modalOffsetPoint = document.getElementById('modal-offset-point');
+    dom.offBtnClose = document.getElementById('off-btn-close');
+    dom.offBaseStake = document.getElementById('off-base-stake');
+    dom.offDxInput = document.getElementById('off-dx-input');
+    dom.offDyInput = document.getElementById('off-dy-input');
+    dom.offQuadrantCanvas = document.getElementById('off-quadrant-canvas');
+    dom.offCoordDisplay = document.getElementById('off-coord-display');
+    dom.offMethodBadge = document.getElementById('off-method-badge');
+    dom.offIdealReading = document.getElementById('off-ideal-reading');
+    dom.offResDesign = document.getElementById('off-res-design');
+    dom.offHiVal = document.getElementById('off-hi-val');
+    dom.offReadingInput = document.getElementById('off-reading-input');
+    dom.offResGround = document.getElementById('off-res-ground');
+    dom.offStatusBadge = document.getElementById('off-status-badge');
+    dom.offPointTag = document.getElementById('off-point-tag');
+    dom.offBtnSavePoint = document.getElementById('off-btn-save-point');
+    dom.offsetStepBtns = document.querySelectorAll('.offset-step-btn');
 
     // Modal Punto de Cambio (PC)
     dom.modalPCAssistant = document.getElementById('modal-pc-assistant');
@@ -1237,9 +1258,15 @@
 
     // Quick PC button
     dom.btnQuickPC.addEventListener('click', openPCAssistant);
+    dom.btnQuickOffset.addEventListener('click', () => openOffsetModal());
 
     // Modal Lectura
     dom.mBtnClose.addEventListener('click', closeStakeModal);
+    dom.mBtnOffset.addEventListener('click', () => {
+      const stake = state.stakes[state.currentStakeIndex];
+      closeStakeModal();
+      openOffsetModal(stake);
+    });
     dom.mBtnPrev.addEventListener('click', () => {
       if (state.currentStakeIndex > 0) {
         state.currentStakeIndex--;
@@ -1314,6 +1341,314 @@
     dom.edBtnClose.addEventListener('click', closeEditDesignModal);
     dom.edBtnSave.addEventListener('click', saveCustomDesign);
     dom.edBtnReset.addEventListener('click', resetCustomDesign);
+
+    // Modal Punto Intermedio (Desfase)
+    dom.offBtnClose.addEventListener('click', closeOffsetModal);
+    dom.offBaseStake.addEventListener('change', updateOffsetCalculations);
+    dom.offDxInput.addEventListener('input', updateOffsetCalculations);
+    dom.offDyInput.addEventListener('input', updateOffsetCalculations);
+    dom.offReadingInput.addEventListener('input', updateOffsetCalculations);
+    dom.offBtnSavePoint.addEventListener('click', saveOffsetPointToProject);
+    dom.offQuadrantCanvas.addEventListener('click', handleCanvasClick);
+
+    // Botones de incremento rápido de desfase
+    dom.offsetStepBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const axis = btn.getAttribute('data-axis');
+        const val = parseFloat(btn.getAttribute('data-val'));
+        if (axis === 'x') {
+          let cur = parseFloat(dom.offDxInput.value) || 0;
+          if (val === 0) cur = 0;
+          else cur += val;
+          dom.offDxInput.value = cur.toFixed(1);
+        } else if (axis === 'y') {
+          let cur = parseFloat(dom.offDyInput.value) || 0;
+          if (val === 0) cur = 0;
+          else cur += val;
+          dom.offDyInput.value = cur.toFixed(1);
+        }
+        updateOffsetCalculations();
+      });
+    });
+  }
+
+  // --- 9. MODAL DE PUNTO INTERMEDIO / DESFASE DESDE ESTACA ---
+  function populateOffsetBaseStakes(selectedStakeId = null) {
+    let opts = '';
+    state.stakes.forEach(s => {
+      const isSel = (selectedStakeId && s.id === selectedStakeId) ? 'selected' : '';
+      opts += `<option value="${s.id}" ${isSel}>${s.code} (X=${s.x.toFixed(1)}m, Y=${s.y.toFixed(1)}m - Rasante=${s.designElevation.toFixed(2)}m)</option>`;
+    });
+    dom.offBaseStake.innerHTML = opts;
+  }
+
+  function openOffsetModal(baseStake = null) {
+    if (!state.activeStation) {
+      alert('Atención: Configure primero una Armada (Altura Instrumental HI) para poder calcular la lectura ideal de mira.');
+      switchTab('tab-station');
+      return;
+    }
+
+    const targetStake = baseStake || state.stakes[state.currentStakeIndex] || state.stakes[0];
+    populateOffsetBaseStakes(targetStake ? targetStake.id : null);
+
+    dom.offDxInput.value = '0.0';
+    dom.offDyInput.value = '0.0';
+    dom.offReadingInput.value = '';
+
+    updateOffsetCalculations();
+    dom.modalOffsetPoint.classList.add('open');
+  }
+
+  function closeOffsetModal() {
+    dom.modalOffsetPoint.classList.remove('open');
+  }
+
+  function getSelectedBaseStake() {
+    const selId = dom.offBaseStake.value;
+    return state.stakes.find(s => s.id === selId) || state.stakes[0];
+  }
+
+  function updateOffsetCalculations() {
+    const baseStake = getSelectedBaseStake();
+    if (!baseStake || !state.project || !state.activeStation) return;
+
+    const dx = parseFloat(dom.offDxInput.value) || 0;
+    const dy = parseFloat(dom.offDyInput.value) || 0;
+
+    const targetX = baseStake.x + dx;
+    const targetY = baseStake.y + dy;
+
+    // Mostrar coordenadas absolutas calculadas
+    dom.offCoordDisplay.textContent = `X=${targetX.toFixed(2)} m, Y=${targetY.toFixed(2)} m`;
+
+    // Calcular Cota de Diseño (Rasante)
+    const calcResult = window.TopoMath.calculateDesignElevationAtCoord(targetX, targetY, state.project.settings, state.stakes);
+    const designZ = calcResult.elevation;
+    dom.offResDesign.textContent = `${designZ.toFixed(3)} m`;
+    dom.offMethodBadge.textContent = calcResult.method;
+
+    // Altura Instrumental y Lectura Ideal de Mira
+    const hi = state.activeStation.hi;
+    dom.offHiVal.textContent = `${hi.toFixed(3)} m`;
+
+    const idealReading = window.TopoMath.calculateIdealReading(hi, designZ);
+    dom.offIdealReading.textContent = `${idealReading.toFixed(3)} m`;
+
+    // Etiqueta automática del punto
+    dom.offPointTag.value = window.TopoMath.getOffsetLabel(baseStake.code, dx, dy);
+
+    // Lectura real opcional digitada
+    const realReading = parseFloat(dom.offReadingInput.value);
+    const tolM = (state.project.settings.toleranceCm || 2.0) / 100;
+
+    if (!isNaN(realReading) && dom.offReadingInput.value.trim() !== '') {
+      const groundZ = window.TopoMath.calculateGroundElevation(hi, realReading);
+      const cutFill = window.TopoMath.calculateCutFill(groundZ, designZ);
+      const evalRes = window.TopoMath.evaluateStatus(cutFill, tolM);
+
+      dom.offResGround.textContent = `${groundZ.toFixed(3)} m`;
+      dom.offStatusBadge.className = `live-status-badge ${evalRes.status.toLowerCase().replace('_', '-')}`;
+      dom.offStatusBadge.textContent = evalRes.fullText;
+    } else {
+      dom.offResGround.textContent = '---.--- m';
+      dom.offStatusBadge.className = 'live-status-badge pendiente';
+      dom.offStatusBadge.textContent = 'DIGITE LECTURA PARA COMPARAR';
+    }
+
+    drawQuadrantCanvas(baseStake, dx, dy);
+  }
+
+  function drawQuadrantCanvas(baseStake, currentDx, currentDy) {
+    const canvas = dom.offQuadrantCanvas;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const isDark = document.body.classList.contains('dark-mode');
+    const gridSpacingX = state.project.settings.dx || 10;
+    const gridSpacingY = state.project.settings.dy || 10;
+
+    // Centrar la estaca base un poco hacia la izquierda y arriba para dejar espacio al cuadrante
+    const originX = w * 0.28;
+    const originY = h * 0.35;
+    const scaleX = (w * 0.52) / gridSpacingX;
+    const scaleY = (h * 0.48) / gridSpacingY;
+
+    // Malla del cuadrante
+    ctx.strokeStyle = isDark ? '#334155' : '#cbd5e1';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(originX, originY, gridSpacingX * scaleX, gridSpacingY * scaleY);
+    ctx.setLineDash([]);
+
+    // Ejes ortogonales
+    ctx.strokeStyle = isDark ? '#64748b' : '#94a3b8';
+    ctx.lineWidth = 2;
+
+    // Eje X
+    ctx.beginPath();
+    ctx.moveTo(originX - 35, originY);
+    ctx.lineTo(originX + gridSpacingX * scaleX + 35, originY);
+    ctx.stroke();
+
+    // Eje Y
+    ctx.beginPath();
+    ctx.moveTo(originX, originY - 25);
+    ctx.lineTo(originX, originY + gridSpacingY * scaleY + 25);
+    ctx.stroke();
+
+    // Textos de orientación
+    ctx.fillStyle = '#0284c7';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('+X (Der)', originX + gridSpacingX * scaleX + 5, originY - 6);
+    ctx.fillText('-X (Izq)', originX - 35, originY - 6);
+
+    ctx.fillStyle = '#16a34a';
+    ctx.fillText('+Y (Adel)', originX + 8, originY + gridSpacingY * scaleY + 18);
+    ctx.fillText('-Y (Atrás)', originX + 8, originY - 14);
+
+    // Dibujar nodos de las 4 estacas
+    const drawStakeNode = (x, y, label, isBase = false) => {
+      ctx.beginPath();
+      ctx.arc(x, y, isBase ? 8 : 6, 0, Math.PI * 2);
+      ctx.fillStyle = isBase ? '#f59e0b' : (isDark ? '#64748b' : '#94a3b8');
+      ctx.fill();
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = isDark ? '#ffffff' : '#000000';
+      ctx.font = isBase ? 'bold 12px sans-serif' : '10px sans-serif';
+      ctx.fillText(label, x - 10, y - 10);
+    };
+
+    drawStakeNode(originX, originY, baseStake.code, true);
+
+    const r = baseStake.row;
+    const c = baseStake.col;
+    if (c + 1 < state.project.settings.cols) {
+      drawStakeNode(originX + gridSpacingX * scaleX, originY, window.TopoMath.getStakeCode(r, c + 1));
+    }
+    if (r + 1 < state.project.settings.rows) {
+      drawStakeNode(originX, originY + gridSpacingY * scaleY, window.TopoMath.getStakeCode(r + 1, c));
+    }
+    if (r + 1 < state.project.settings.rows && c + 1 < state.project.settings.cols) {
+      drawStakeNode(originX + gridSpacingX * scaleX, originY + gridSpacingY * scaleY, window.TopoMath.getStakeCode(r + 1, c + 1));
+    }
+
+    // Punto del Cadenero (Objetivo con desfase)
+    const targetPx = originX + (currentDx * scaleX);
+    const targetPy = originY + (currentDy * scaleY);
+
+    // Vector de desplazamiento
+    ctx.beginPath();
+    ctx.moveTo(originX, originY);
+    ctx.lineTo(targetPx, targetPy);
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Mira / Diana del cadenero
+    ctx.beginPath();
+    ctx.arc(targetPx, targetPy, 11, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.35)';
+    ctx.fill();
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(targetPx, targetPy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#dc2626';
+    ctx.fill();
+
+    // Etiqueta flotante del cadenero
+    ctx.fillStyle = isDark ? '#fecaca' : '#991b1b';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText(`Cadenero (${currentDx > 0 ? '+' : ''}${currentDx.toFixed(1)}m, ${currentDy > 0 ? '+' : ''}${currentDy.toFixed(1)}m)`, targetPx + 14, targetPy + 4);
+  }
+
+  function handleCanvasClick(e) {
+    const canvas = dom.offQuadrantCanvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    const gridSpacingX = state.project.settings.dx || 10;
+    const gridSpacingY = state.project.settings.dy || 10;
+
+    const originX = canvas.width * 0.28;
+    const originY = canvas.height * 0.35;
+    const scaleX = (canvas.width * 0.52) / gridSpacingX;
+    const scaleY = (canvas.height * 0.48) / gridSpacingY;
+
+    let dX = (clickX - originX) / scaleX;
+    let dY = (clickY - originY) / scaleY;
+
+    // Redondear a 0.5m más cercano
+    dX = Math.round(dX * 2) / 2;
+    dY = Math.round(dY * 2) / 2;
+
+    dom.offDxInput.value = dX.toFixed(1);
+    dom.offDyInput.value = dY.toFixed(1);
+
+    updateOffsetCalculations();
+  }
+
+  async function saveOffsetPointToProject() {
+    const baseStake = getSelectedBaseStake();
+    if (!baseStake || !state.activeStation) return;
+
+    const tag = dom.offPointTag.value.trim() || 'Punto Desfase';
+    const dx = parseFloat(dom.offDxInput.value) || 0;
+    const dy = parseFloat(dom.offDyInput.value) || 0;
+    const targetX = baseStake.x + dx;
+    const targetY = baseStake.y + dy;
+
+    const calcResult = window.TopoMath.calculateDesignElevationAtCoord(targetX, targetY, state.project.settings, state.stakes);
+    const designZ = calcResult.elevation;
+    const hi = state.activeStation.hi;
+
+    let realReading = parseFloat(dom.offReadingInput.value);
+    let groundZ;
+    let cutFill;
+
+    if (!isNaN(realReading)) {
+      groundZ = window.TopoMath.calculateGroundElevation(hi, realReading);
+      cutFill = window.TopoMath.calculateCutFill(groundZ, designZ);
+    } else {
+      realReading = window.TopoMath.calculateIdealReading(hi, designZ);
+      groundZ = designZ;
+      cutFill = 0.00;
+    }
+
+    const auxPt = {
+      id: 'aux_off_' + Date.now(),
+      projId: state.project.id,
+      name: tag,
+      reading: realReading,
+      stationId: state.activeStation.id,
+      hi: hi,
+      elevation: groundZ,
+      designElevation: designZ,
+      cutFill: cutFill,
+      createdAt: new Date().toISOString(),
+      note: `Desfase desde ${baseStake.code} [dX=${dx > 0 ? '+' : ''}${dx.toFixed(1)}m, dY=${dy > 0 ? '+' : ''}${dy.toFixed(1)}m] (${calcResult.method})`
+    };
+
+    await window.topoDB.saveAuxPoint(auxPt);
+    state.auxPoints = await window.topoDB.getAuxPoints(state.project.id);
+
+    renderAuxTab();
+    renderExportTab();
+    closeOffsetModal();
+
+    alert(`✔ Punto intermedio guardado en Cartera Topográfica:\n${tag}\nCota Rasante: ${designZ.toFixed(3)} m | Lectura Ideal: ${window.TopoMath.calculateIdealReading(hi, designZ).toFixed(3)} m`);
   }
 
   // Iniciar la app al cargar el DOM

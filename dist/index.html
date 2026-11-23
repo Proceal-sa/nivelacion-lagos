@@ -115,7 +115,10 @@
               <span style="font-weight: 800; font-size: 0.9rem;" id="grid-progress-text">Medidas: 0 / 0 (0%)</span>
               <div style="font-size: 0.75rem; color: var(--text-muted);" id="grid-tol-text">Tolerancia: ±2 cm</div>
             </div>
-            <div style="display: flex; gap: 6px;">
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button id="btn-quick-offset" class="btn btn-primary" style="min-height: 38px; padding: 6px 12px; font-size: 0.85rem;" title="Medir rasante en cualquier punto del lago">
+                📐 Punto Intermedio (Desfase)
+              </button>
               <button id="btn-quick-pc" class="btn btn-warning" style="min-height: 38px; padding: 6px 12px; font-size: 0.85rem;">
                 + Punto Cambio (PC)
               </button>
@@ -577,12 +580,15 @@
         </div>
 
         <!-- Botones de Utilidad Rápida de la Estaca -->
-        <div style="display: flex; gap: 6px; justify-content: space-between;">
+        <div style="display: flex; gap: 6px; justify-content: space-between; flex-wrap: wrap;">
+          <button id="m-btn-offset" class="btn btn-warning" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;" title="Medir desfase desde esta estaca">
+            📐 Desfase / Pto Intermedio
+          </button>
           <button id="m-btn-edit-design" class="btn btn-outline" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;">
             ✏️ Modificar Rasante
           </button>
           <button id="m-btn-add-note" class="btn btn-outline" style="min-height: 34px; padding: 4px 8px; font-size: 0.78rem;">
-            📝 Nota de Campo
+            📝 Nota
           </button>
         </div>
 
@@ -688,6 +694,134 @@
         <button id="pc-btn-save-confirm" class="btn btn-success btn-block" style="padding: 12px; font-size: 1.1rem;">
           ✔ Confirmar y Cambiar a Nueva Armada
         </button>
+
+      </div>
+    </div>
+
+    <!-- ============================================================
+         MODAL DE PUNTO INTERMEDIO / DESFASE DESDE ESTACA
+         ============================================================ -->
+    <div id="modal-offset-point" class="modal-backdrop">
+      <div class="modal-sheet" style="max-width: 580px;">
+        
+        <div class="modal-header-row">
+          <div class="modal-stake-title" style="color: var(--primary-accent);">
+            <span>📐 Punto Intermedio</span>
+            <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted);">(Desfase)</span>
+          </div>
+          <button id="off-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;">✕</button>
+        </div>
+
+        <!-- Selección de Estaca Base -->
+        <div class="form-group" style="margin-bottom: 8px;">
+          <label class="form-label" for="off-base-stake" style="font-size: 0.82rem;">Estaca de Referencia Base:</label>
+          <select id="off-base-stake" class="form-select" style="min-height: 42px; font-weight: 800;">
+            <!-- Generado dinámicamente -->
+          </select>
+        </div>
+
+        <!-- Guía Visual de Orientación de Ejes -->
+        <div class="axis-guide-card">
+          <div class="axis-compass-row">
+            <div class="axis-badge">
+              <span>↔️ Eje X:</span>
+              <span style="color:#0284c7;">-X Izq</span> | <span style="color:#0284c7;">+X Der (Columna 1→N)</span>
+            </div>
+            <div class="axis-badge">
+              <span>↕️ Eje Y:</span>
+              <span style="color:#16a34a;">-Y Atrás</span> | <span style="color:#16a34a;">+Y Adelante (Fila A→Z)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mini-Mapa Interactivo de Cuadrante (Toque directo) -->
+        <div class="interactive-quadrant-wrapper">
+          <canvas id="off-quadrant-canvas" class="quadrant-canvas" width="340" height="150"></canvas>
+          <div class="quadrant-hint">👉 Toque en cualquier punto del cuadrante para fijar la posición del cadenero</div>
+        </div>
+
+        <!-- Controles de Desfase Métrico -->
+        <div class="form-grid-2" style="gap: 8px;">
+          <!-- Desfase X -->
+          <div>
+            <label class="form-label" for="off-dx-input" style="font-size: 0.8rem;">
+              Desfase Horizontal (dX en m):
+            </label>
+            <input type="number" id="off-dx-input" class="form-control" step="0.1" value="0.0" style="min-height: 42px; font-family: var(--font-mono); font-weight: 800;">
+            <div class="offset-step-row">
+              <button class="offset-step-btn" data-axis="x" data-val="-5">-5m</button>
+              <button class="offset-step-btn" data-axis="x" data-val="-1">-1m</button>
+              <button class="offset-step-btn zero-btn" data-axis="x" data-val="0">0</button>
+              <button class="offset-step-btn" data-axis="x" data-val="1">+1m</button>
+              <button class="offset-step-btn" data-axis="x" data-val="5">+5m</button>
+            </div>
+          </div>
+
+          <!-- Desfase Y -->
+          <div>
+            <label class="form-label" for="off-dy-input" style="font-size: 0.8rem;">
+              Desfase Vertical (dY en m):
+            </label>
+            <input type="number" id="off-dy-input" class="form-control" step="0.1" value="0.0" style="min-height: 42px; font-family: var(--font-mono); font-weight: 800;">
+            <div class="offset-step-row">
+              <button class="offset-step-btn" data-axis="y" data-val="-5">-5m</button>
+              <button class="offset-step-btn" data-axis="y" data-val="-1">-1m</button>
+              <button class="offset-step-btn zero-btn" data-axis="y" data-val="0">0</button>
+              <button class="offset-step-btn" data-axis="y" data-val="1">+1m</button>
+              <button class="offset-step-btn" data-axis="y" data-val="5">+5m</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Coordenadas calculadas exactas -->
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-top: 2px;">
+          <span>Coord Absoluta: <strong id="off-coord-display" style="font-family: var(--font-mono); color: var(--text-main);">X=0.0m, Y=0.0m</strong></span>
+          <span id="off-method-badge" style="color: var(--primary-accent); font-weight: 800;">Pendiente Teórica</span>
+        </div>
+
+        <!-- ==============================================
+             NÚMEROS GIGANTES: LECTURA IDEAL DE MIRA
+             ============================================== -->
+        <div class="giant-ideal-box">
+          <div class="giant-ideal-title">📢 LECTURA IDEAL DE MIRA (A RASANTE)</div>
+          <div class="giant-ideal-num" id="off-ideal-reading">---.--- m</div>
+          <div class="giant-ideal-sub">
+            <span>Cota Rasante: <strong id="off-res-design" style="font-family: var(--font-mono); color: #86efac;">100.000 m</strong></span>
+            <span>HI Usado: <strong id="off-hi-val" style="font-family: var(--font-mono); color: #86efac;">---.--- m</strong></span>
+          </div>
+        </div>
+
+        <!-- Sección Opcional: Lectura Real de Mira del Cadenero -->
+        <div class="card" style="margin-bottom: 4px; padding: 10px; background-color: var(--bg-surface-elevated);">
+          <div style="font-weight: 800; font-size: 0.88rem; margin-bottom: 6px;">
+            📏 Registrar Medición Real (Opcional):
+          </div>
+          <div class="form-grid-2" style="margin-bottom: 6px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="off-reading-input" style="font-size: 0.78rem;">Lectura Real Mira VI (m):</label>
+              <input type="number" id="off-reading-input" class="form-control" step="0.001" placeholder="Ej. 1.435" style="min-height: 44px; font-size: 1.15rem; font-family: var(--font-mono); font-weight: 900;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" style="font-size: 0.78rem;">Cota Terreno Resultante:</label>
+              <div id="off-res-ground" class="form-control" style="min-height: 44px; display:flex; align-items:center; background:#f1f5f9; font-family:var(--font-mono); font-weight:900;">
+                ---.--- m
+              </div>
+            </div>
+          </div>
+
+          <div id="off-status-badge" class="live-status-badge pendiente" style="padding: 6px 10px; font-size: 1rem; margin-bottom: 6px;">
+            DIGITE LECTURA PARA COMPARAR
+          </div>
+
+          <div class="form-group" style="margin-bottom: 6px;">
+            <label class="form-label" for="off-point-tag" style="font-size: 0.78rem;">Etiqueta del Punto en Cartera:</label>
+            <input type="text" id="off-point-tag" class="form-control" style="min-height: 38px; font-size: 0.88rem; font-weight: 700;">
+          </div>
+
+          <button id="off-btn-save-point" class="btn btn-success btn-block" style="min-height: 44px; font-size: 0.95rem;">
+            💾 Guardar Punto Intermedio en Cartera (CSV)
+          </button>
+        </div>
 
       </div>
     </div>

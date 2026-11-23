@@ -267,6 +267,107 @@ const TopoMath = {
       totalStakes,
       coveragePercent: totalStakes > 0 ? Math.round((measuredCount / totalStakes) * 100) : 0
     };
+  },
+
+  // Calculate Design Elevation at ANY arbitrary coordinate (x, y)
+  // Supports either exact slope formulas or bilinear interpolation if manual nodes exist
+  calculateDesignElevationAtCoord(x, y, settings, stakes = []) {
+    const dx = settings.dx || 10;
+    const dy = settings.dy || 10;
+    const rows = settings.rows || 5;
+    const cols = settings.cols || 8;
+    const boxRow = settings.boxRow ?? 0;
+    const boxCol = settings.boxCol ?? 0;
+    const baseElevation = settings.boxElevation ?? 100.0;
+    const slopeMode = settings.slopeMode || 'orthogonal';
+
+    const boxPos = this.getCoordinates(boxRow, boxCol, dx, dy);
+
+    // Check if any stake in the enclosing quadrant has a custom design elevation override
+    if (stakes && stakes.length > 0) {
+      // Find enclosing cell index
+      let c = Math.floor(x / dx);
+      let r = Math.floor(y / dy);
+
+      // Clamp to valid quadrant range
+      c = Math.max(0, Math.min(cols - 2, c));
+      r = Math.max(0, Math.min(rows - 2, r));
+
+      const stakeMap = new Map();
+      stakes.forEach(s => stakeMap.set(`${s.row}_${s.col}`, s));
+
+      const q00 = stakeMap.get(`${r}_${c}`);
+      const q10 = stakeMap.get(`${r}_${c + 1}`);
+      const q01 = stakeMap.get(`${r + 1}_${c}`);
+      const q11 = stakeMap.get(`${r + 1}_${c + 1}`);
+
+      if (q00 && q10 && q01 && q11) {
+        const hasCustom = q00.isCustomDesign || q10.isCustomDesign || q01.isCustomDesign || q11.isCustomDesign;
+
+        if (hasCustom) {
+          // Perform Bilinear Interpolation
+          const x0 = c * dx;
+          const y0 = r * dy;
+          const u = Math.max(0, Math.min(1, (x - x0) / dx));
+          const v = Math.max(0, Math.min(1, (y - y0) / dy));
+
+          const z00 = q00.designElevation;
+          const z10 = q10.designElevation;
+          const z01 = q01.designElevation;
+          const z11 = q11.designElevation;
+
+          const interpolatedZ = (1 - u) * (1 - v) * z00 +
+                                u * (1 - v) * z10 +
+                                (1 - u) * v * z01 +
+                                u * v * z11;
+
+          return {
+            elevation: Math.round(interpolatedZ * 1000) / 1000,
+            method: 'Interpolación Bilineal',
+            isBilinear: true,
+            quadrant: [q00.code, q10.code, q01.code, q11.code],
+            weights: { u: Math.round(u * 100), v: Math.round(v * 100) }
+          };
+        }
+      }
+    }
+
+    // Pure mathematical formula based on drainage slope mode
+    const deltaX = Math.abs(x - boxPos.x);
+    const deltaY = Math.abs(y - boxPos.y);
+
+    if (slopeMode === 'orthogonal') {
+      const sx = (settings.slopeX ?? 0.5) / 100;
+      const sy = (settings.slopeY ?? 0.8) / 100;
+      const elev = baseElevation + (deltaX * sx) + (deltaY * sy);
+      return {
+        elevation: Math.round(elev * 1000) / 1000,
+        method: 'Doble Pendiente Ortogonal',
+        isBilinear: false
+      };
+    } else {
+      const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const sRadial = (settings.slopeRadial ?? 0.6) / 100;
+      const elev = baseElevation + (dist * sRadial);
+      return {
+        elevation: Math.round(elev * 1000) / 1000,
+        method: 'Pendiente Radial Directa',
+        isBilinear: false
+      };
+    }
+  },
+
+  // Generates human readable offset description (e.g. "B-2 +3.5m Der, +2.0m Arr")
+  getOffsetLabel(stakeCode, dX, dY) {
+    const parts = [];
+    if (dX > 0) parts.push(`+${dX.toFixed(1)}m Der`);
+    else if (dX < 0) parts.push(`-${Math.abs(dX).toFixed(1)}m Izq`);
+
+    if (dY > 0) parts.push(`+${dY.toFixed(1)}m Adel`);
+    else if (dY < 0) parts.push(`-${Math.abs(dY).toFixed(1)}m Atr`);
+
+    if (parts.length === 0) return `${stakeCode} (En Estaca)`;
+    return `${stakeCode} (${parts.join(', ')})`;
   }
 };
 

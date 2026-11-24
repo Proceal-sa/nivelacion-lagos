@@ -227,14 +227,17 @@
 
           <!-- Selector de Modo de Replanteo -->
           <div class="view-mode-bar" style="margin-bottom: 12px;">
-            <button id="cfg-mode-tape-btn" class="view-mode-btn active" type="button">
-              <span>📏 100% Cinta (4 Bordes + 2 Diag)</span>
+            <button id="cfg-mode-seed-btn" class="view-mode-btn active" type="button">
+              <span>🌱 Cuadro Semilla (Vectorial Cinta)</span>
+            </button>
+            <button id="cfg-mode-tape-btn" class="view-mode-btn" type="button">
+              <span>📏 4 Bordes Perimetrales</span>
             </button>
             <button id="cfg-mode-regular-btn" class="view-mode-btn" type="button">
-              <span>📐 Malla Ortogonal Base</span>
+              <span>📐 Ortogonal Base</span>
             </button>
             <button id="cfg-mode-talud-btn" class="view-mode-btn" type="button">
-              <span>🚜 Replanteo por Taludes</span>
+              <span>🚜 Por Taludes</span>
             </button>
           </div>
 
@@ -243,8 +246,188 @@
             <input type="text" id="cfg-pond-name" class="form-control" value="Lago Piscícola 1 - Tilapia" placeholder="Ej. Lago Engorde 01">
           </div>
 
+          <!-- SECCIÓN 0: CUADRO SEMILLA VECTORIAL (A1, A2, B1, B2) CON INCLINACIÓN REAL EN X Y Y -->
+          <div id="cfg-section-seed">
+            <div class="alert-box alert-info" style="margin-bottom: 12px; font-size: 0.84rem;">
+              <span>🌱</span>
+              <div>
+                <strong>Cuadro Semilla Vectorial Inclinado:</strong>
+                Define las 4 estacas semilla (A1, A2, B1, B2) con cinta y 2 diagonales. La malla completa se inclina en ambos ejes (Uy ≠ 0) sin que las filas queden paralelas artificialmente al Eje X.
+              </div>
+            </div>
+
+            <!-- 1. Medidas de Cinta del Cuadro Semilla -->
+            <label class="form-label" style="font-size: 0.88rem; color: #0284c7; font-weight: 700;">
+              ① Medidas con Cinta del Cuadro Semilla (A1, A2, B1, B2):
+            </label>
+            <div class="form-grid-2" style="margin-bottom: 8px;">
+              <div class="form-group">
+                <label class="form-label" for="seed-dcol">Tramo Columna d_col (A1 ➔ A2):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="seed-dcol" class="form-control" step="0.1" value="15.0" placeholder="Ej. 15.0">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Distancia entre columnas contiguas</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="seed-dfila">Tramo Fila d_fila (A1 ➔ B1):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="seed-dfila" class="form-control" step="0.1" value="15.0" placeholder="Ej. 15.0">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Distancia entre filas contiguas (letras)</div>
+              </div>
+            </div>
+
+            <!-- Diagonales del Cuadro Semilla -->
+            <div class="form-grid-2" style="margin-bottom: 10px;">
+              <div class="form-group">
+                <label class="form-label" for="seed-d1">Diagonal 1 d1 (A1 ➔ B2 Mayor):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="seed-d1" class="form-control" step="0.01" value="23.85" placeholder="Ej. 23.85">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Diagonal cruzada A1 hacia B2</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="seed-d2">Diagonal 2 d2 (A2 ➔ B1 Menor):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="seed-d2" class="form-control" step="0.01" value="18.20" placeholder="Ej. 18.20">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Diagonal cruzada A2 hacia B1</div>
+              </div>
+            </div>
+
+            <!-- 2. Punto de Arranque A1 respecto a los Ejes Cartesiano -->
+            <label class="form-label" style="font-size: 0.88rem; color: #16a34a; font-weight: 700;">
+              ② Punto de Inicio A1 respecto a los Ejes Fijos X y Y:
+            </label>
+            <div class="form-grid-2" style="margin-bottom: 10px;">
+              <div class="form-group">
+                <label class="form-label" for="seed-xa1">Retiro X de A1 al Eje Y (x_A1):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="seed-xa1" class="form-control" step="0.1" value="1.0" placeholder="Ej. 1.0">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Distancia horizontal desde el borde izquierdo (X=0)</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="seed-ya1">Retiro Y de A1 al Eje X (y_A1):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="seed-ya1" class="form-control" step="0.1" value="2.0" placeholder="Ej. 2.0">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Distancia vertical desde el borde frontal (Y=0)</div>
+              </div>
+            </div>
+
+            <!-- 3. Giro global respecto a los Ejes X y Y -->
+            <label class="form-label" style="font-size: 0.88rem; color: #b45309; font-weight: 700;">
+              ③ Orientación del Rombo al Terreno (1 Medida de Cinta al Borde):
+            </label>
+            <div class="view-mode-bar" style="margin-bottom: 8px;">
+              <button type="button" id="seed-ref-xb1-btn" class="view-mode-btn active" data-ref="y_axis_xB1">
+                <span>Opción 1: Retiro x_B1 a Eje Y</span>
+              </button>
+              <button type="button" id="seed-ref-ya2-btn" class="view-mode-btn" data-ref="x_axis_yA2">
+                <span>Opción 2: Retiro y_A2 a Eje X</span>
+              </button>
+              <button type="button" id="seed-ref-both-btn" class="view-mode-btn" data-ref="both_retires">
+                <span>Opción 3: Ambos Retiros</span>
+              </button>
+            </div>
+
+            <div class="form-grid-2" style="margin-bottom: 10px;">
+              <div class="form-group" id="seed-grp-xb1">
+                <label class="form-label" for="seed-xb1">Retiro de B1 a Eje Y (x_B1):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="seed-xb1" class="form-control" step="0.1" value="1.5" placeholder="Ej. 1.5">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Fija el ángulo real de las letras theta_V</div>
+              </div>
+              <div class="form-group" id="seed-grp-ya2" style="display: none;">
+                <label class="form-label" for="seed-ya2">Retiro de A2 a Eje X (y_A2):</label>
+                <div class="input-with-unit">
+                  <input type="number" id="seed-ya2" class="form-control" step="0.1" value="5.48" placeholder="Ej. 5.48">
+                  <span class="unit-tag">m</span>
+                </div>
+                <div class="form-help">Fija la inclinación de la fila A theta_U</div>
+              </div>
+            </div>
+
+            <!-- Tarjeta de Resultados Matemáticos en Vivo -->
+            <div class="card" style="padding: 12px; background-color: var(--bg-surface); margin-bottom: 12px; border: 2px solid var(--border-strong);">
+              <div style="font-weight: 800; font-size: 0.9rem; margin-bottom: 6px; color: var(--primary-accent);">
+                📐 Parámetros Vectoriales Resueltos (En Vivo):
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; font-size: 0.82rem; font-family: var(--font-mono);">
+                <div>
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">Ángulo Interno α:</span><br>
+                  <strong id="seed-res-alpha" style="font-size: 1.1rem; color: #16a34a;">74.69°</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">Inclinación Fila A (θ_U):</span><br>
+                  <strong id="seed-res-thetau" style="font-size: 1.1rem; color: #0284c7;">+13.40°</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">Inclinación Letras (θ_V):</span><br>
+                  <strong id="seed-res-thetav" style="font-size: 1.1rem; color: #7c3aed;">88.09°</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">Vector U (Fila):</span><br>
+                  <strong id="seed-res-vecu" style="font-size: 0.88rem;">(14.59, 3.48)m</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">Vector V (Col):</span><br>
+                  <strong id="seed-res-vecv" style="font-size: 0.88rem;">(0.50, 14.99)m</strong>
+                </div>
+                <div>
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">Estaca A2 / A10:</span><br>
+                  <strong id="seed-res-a2-a10" style="font-size: 0.85rem; color:#b45309;">A2=5.48m | A10=33.28m</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cantidad de Estacas y Filas -->
+            <label class="form-label" style="font-size: 0.88rem; color: #7c3aed; font-weight: 700;">
+              ④ Extensión de la Malla (ej. 7 Filas × 10 Columnas = 70 Estacas):
+            </label>
+            <div class="form-grid-2" style="margin-bottom: 8px;">
+              <div class="form-group">
+                <label class="form-label" for="seed-rows">Número de Filas (A..G):</label>
+                <input type="number" id="seed-rows" class="form-control" min="2" max="26" value="7">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="seed-cols">Columnas por Fila (1..10):</label>
+                <input type="number" id="seed-cols" class="form-control" min="2" max="50" value="10">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="seed-row-pattern">Patrón de Estacas Opcional (ej. 5, 7, 7, 7, 5):</label>
+              <input type="text" id="seed-row-pattern" class="form-control" placeholder="Dejar vacío para rectangular (ej. 7x10=70 estacas) o escribir conteo">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Alineación de Filas Variables:</label>
+              <div class="view-mode-bar" style="margin-top: 4px;">
+                <button type="button" id="seed-align-center-btn" class="view-mode-btn active" data-align="center">
+                  <span>⏺ Centrada</span>
+                </button>
+                <button type="button" id="seed-align-left-btn" class="view-mode-btn" data-align="left">
+                  <span>◀ Izquierda</span>
+                </button>
+                <button type="button" id="seed-align-right-btn" class="view-mode-btn" data-align="right">
+                  <span>▶ Derecha</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- SECCIÓN 1: REPLANTEO 100% CINTA MÉTRICA (4 BORDES + 2 DIAGONALES) -->
-          <div id="cfg-section-tape">
+          <div id="cfg-section-tape" style="display: none;">
             <div class="alert-box alert-info" style="margin-bottom: 12px; font-size: 0.84rem;">
               <span>📏</span>
               <div>

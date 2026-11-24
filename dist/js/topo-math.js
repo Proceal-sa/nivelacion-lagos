@@ -603,6 +603,204 @@ const TopoMath = {
   },
 
   // =========================================================================
+  // CUADRO SEMILLA VECTORIAL (A1, A2, B1, B2) CON INCLINACIÓN REAL EN X Y Y
+  // =========================================================================
+
+  /**
+   * Resuelve el Cuadro Semilla Vectorial (A1, A2, B1, B2).
+   * Ambas direcciones se inclinan respecto a los ejes fijos X y Y:
+   * 1. Ángulo interno exacto por las 2 Diagonales (alpha):
+   *    cos1 = (d1*d1 - d_col*d_col - d_fila*d_fila) / (2 * d_col * d_fila)
+   *    cos2 = (d_col*d_col + d_fila*d_fila - d2*d2) / (2 * d_col * d_fila)
+   *    alpha = Math.acos(clamp((cos1 + cos2) / 2, -0.999, 0.999))
+   * 2. Giro global respecto a X y Y (sin bloquear Uy = 0):
+   *    Opción 1 (Retiro x_B1 al Eje Y):
+   *      theta_V = Math.atan2(Math.sqrt(d_fila*d_fila - (x_B1 - x_A1)^2), x_B1 - x_A1)
+   *      theta_U = theta_V - alpha
+   *    Opción 2 (Retiro y_A2 al Eje X):
+   *      theta_U = Math.asin((y_A2 - y_A1) / d_col)
+   *      theta_V = theta_U + alpha
+   * 3. Vectores inclinados U y V:
+   *    Ux = d_col * Math.cos(theta_U), Uy = d_col * Math.sin(theta_U)
+   *    Vx = d_fila * Math.cos(theta_V), Vy = d_fila * Math.sin(theta_V)
+   */
+  solveSeedFrameVectorial(params) {
+    const dCol = Number(params.dCol || params.dx || 15.0);
+    const dFila = Number(params.dFila || params.dy || 15.0);
+    const d1 = Number(params.d1 !== undefined ? params.d1 : (params.seedD1 !== undefined ? params.seedD1 : 23.85));
+    const d2 = Number(params.d2 !== undefined ? params.d2 : (params.seedD2 !== undefined ? params.seedD2 : 18.20));
+    const xA1 = Number(params.xA1 !== undefined ? params.xA1 : (params.seedXA1 !== undefined ? params.seedXA1 : 1.0));
+    const yA1 = Number(params.yA1 !== undefined ? params.yA1 : (params.seedYA1 !== undefined ? params.seedYA1 : 2.0));
+    const refMode = params.refMode || params.seedRefMode || 'y_axis_xB1';
+    const xB1 = Number(params.xB1 !== undefined ? params.xB1 : (params.seedXB1 !== undefined ? params.seedXB1 : 1.5));
+    const yA2 = Number(params.yA2 !== undefined ? params.yA2 : (params.seedYA2 !== undefined ? params.seedYA2 : 5.48));
+
+    if (dCol <= 0 || dFila <= 0) {
+      return { success: false, error: 'd_col y d_fila deben ser mayores a cero' };
+    }
+
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+    let alpha = 0;
+    let cos1 = 0;
+    let cos2 = 0;
+    let thetaV = 0;
+    let thetaU = 0;
+    let closureErrorM = 0;
+
+    if (refMode === 'both_retires' && (d1 <= 0 || d2 <= 0)) {
+      // Opción 3: Ambos retiros sin diagonales directas
+      const dyU = yA2 - yA1;
+      const sinU = clamp(dyU / dCol, -0.999, 0.999);
+      thetaU = Math.asin(sinU);
+
+      const dxV = xB1 - xA1;
+      const dyV = Math.sqrt(Math.max(0, dFila * dFila - dxV * dxV));
+      thetaV = Math.atan2(dyV, dxV);
+
+      alpha = thetaV - thetaU;
+      cos1 = Math.cos(alpha);
+      cos2 = Math.cos(alpha);
+    } else {
+      // 1. Ángulo interno exacto por las 2 Diagonales (alpha)
+      cos1 = (d1 * d1 - dCol * dCol - dFila * dFila) / (2 * dCol * dFila);
+      cos2 = (dCol * dCol + dFila * dFila - d2 * d2) / (2 * dCol * dFila);
+
+      const cosAvg = clamp((cos1 + cos2) / 2, -0.999, 0.999);
+      alpha = Math.acos(cosAvg);
+
+      // Chequeo de consistencia de cierre con cinta entre diagonales
+      const calcD1 = Math.sqrt(Math.max(0, dCol * dCol + dFila * dFila + 2 * dCol * dFila * cos2));
+      closureErrorM = Math.abs(d1 - calcD1);
+
+      // 2. Giro global respecto a los Ejes X y Y (sin bloquear Uy = 0)
+      if (refMode === 'x_axis_yA2') {
+        // Opción 2: Referencia al Eje X con y_A2
+        const dyU = yA2 - yA1;
+        const sinU = clamp(dyU / dCol, -0.999, 0.999);
+        thetaU = Math.asin(sinU);
+        thetaV = thetaU + alpha;
+      } else {
+        // Opción 1: Referencia al Eje Y con x_B1 (predeterminada)
+        const dxV = xB1 - xA1;
+        const dyV = Math.sqrt(Math.max(0, dFila * dFila - dxV * dxV));
+        thetaV = Math.atan2(dyV, dxV);
+        thetaU = thetaV - alpha;
+      }
+    }
+
+    // 3. Vectores inclinados U y V (¡Uy jamás queda bloqueado en 0!)
+    const Ux = dCol * Math.cos(thetaU);
+    const Uy = dCol * Math.sin(thetaU);
+    const Vx = dFila * Math.cos(thetaV);
+    const Vy = dFila * Math.sin(thetaV);
+
+    // Cuatro esquinas del cuadro semilla
+    const A1 = { x: xA1, y: yA1 };
+    const A2 = { x: xA1 + Ux, y: yA1 + Uy };
+    const B1 = { x: xA1 + Vx, y: yA1 + Vy };
+    const B2 = { x: xA1 + Ux + Vx, y: yA1 + Uy + Vy };
+
+    const alphaDeg = alpha * 180 / Math.PI;
+    const thetaUDeg = thetaU * 180 / Math.PI;
+    const thetaVDeg = thetaV * 180 / Math.PI;
+
+    return {
+      success: true,
+      dCol,
+      dFila,
+      d1,
+      d2,
+      xA1,
+      yA1,
+      xB1: Math.round(B1.x * 1000) / 1000,
+      yA2: Math.round(A2.y * 1000) / 1000,
+      alpha,
+      alphaDeg: Math.round(alphaDeg * 100) / 100,
+      thetaU,
+      thetaUDeg: Math.round(thetaUDeg * 100) / 100,
+      thetaV,
+      thetaVDeg: Math.round(thetaVDeg * 100) / 100,
+      cos1,
+      cos2,
+      closureErrorMeters: Math.round(closureErrorM * 1000) / 1000,
+      closureErrorCm: Math.round(closureErrorM * 1000) / 10,
+      Ux: Math.round(Ux * 1000) / 1000,
+      Uy: Math.round(Uy * 1000) / 1000,
+      Vx: Math.round(Vx * 1000) / 1000,
+      Vy: Math.round(Vy * 1000) / 1000,
+      uRow: { x: Math.cos(thetaU), y: Math.sin(thetaU) },
+      uCol: { x: Math.cos(thetaV), y: Math.sin(thetaV) },
+      A1: { x: Math.round(A1.x * 1000) / 1000, y: Math.round(A1.y * 1000) / 1000 },
+      A2: { x: Math.round(A2.x * 1000) / 1000, y: Math.round(A2.y * 1000) / 1000 },
+      B1: { x: Math.round(B1.x * 1000) / 1000, y: Math.round(B1.y * 1000) / 1000 },
+      B2: { x: Math.round(B2.x * 1000) / 1000, y: Math.round(B2.y * 1000) / 1000 }
+    };
+  },
+
+  /**
+   * Genera las estacas del lago usando los vectores inclinados U y V del Cuadro Semilla.
+   * Posición: X = xA1 + (c + offset) * Ux + r * Vx
+   *           Y = yA1 + (c + offset) * Uy + r * Vy
+   */
+  generateSeedFrameMesh(projId, seedFrame, settings) {
+    const { Ux, Uy, Vx, Vy, xA1, yA1 } = seedFrame;
+
+    const rowCounts = settings.rowPattern
+      ? settings.rowPattern.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+      : [];
+
+    const numRows = rowCounts.length > 0 ? rowCounts.length : (settings.rows || 7);
+    const maxCols = rowCounts.length > 0 ? Math.max(...rowCounts) : (settings.cols || 10);
+    const alignment = settings.rowAlignment || 'center'; // 'center', 'left', 'right'
+
+    const stakes = [];
+
+    for (let r = 0; r < numRows; r++) {
+      const countInRow = rowCounts.length > 0 ? rowCounts[r] : maxCols;
+
+      for (let c = 0; c < countInRow; c++) {
+        let offsetFila = 0;
+        if (alignment === 'center') {
+          offsetFila = (maxCols - countInRow) / 2;
+        } else if (alignment === 'right') {
+          offsetFila = maxCols - countInRow;
+        }
+
+        const effC = c + offsetFila;
+        const x = xA1 + effC * Ux + r * Vx;
+        const y = yA1 + effC * Uy + r * Vy;
+
+        const code = this.getStakeCode(r, c);
+        const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+
+        stakes.push({
+          id: `${projId}_${r}_${c}`,
+          projId: projId,
+          row: r,
+          col: c,
+          code: code,
+          x: Math.round(x * 1000) / 1000,
+          y: Math.round(y * 1000) / 1000,
+          designElevation: designElev.elevation,
+          isCustomDesign: false,
+          reading: null,
+          measuredElevation: null,
+          stationId: null,
+          measuredAt: null,
+          cutFill: null,
+          status: 'PENDIENTE',
+          hasPuddleWarning: false,
+          puddleReason: null,
+          note: ''
+        });
+      }
+    }
+
+    return stakes;
+  },
+
+  // =========================================================================
   // REPLANTEO 100% CINTA MÉTRICA (4 BORDES + 2 DIAGONALES) & MALLA IRREGULAR
   // =========================================================================
 
@@ -806,8 +1004,20 @@ const TopoMath = {
     };
   },
 
-  // Generates stakes array with either regular grid, tape quadrilateral, or variable row counts (e.g. "5, 7, 7, 7, 5")
+  // Generates stakes array with seed frame, tape quadrilateral, regular grid, or variable row counts
   generateStakes(projId, settings) {
+    // 1. Modo Cuadro Semilla Vectorial (Inclinación real U y V con cinta y retiros a ejes)
+    if (settings.meshMode === 'seed' || (!settings.meshMode && settings.seedFrame)) {
+      let seedRes = settings.seedFrame;
+      if (!seedRes || !seedRes.success) {
+        seedRes = this.solveSeedFrameVectorial(settings);
+      }
+      if (seedRes && seedRes.success) {
+        return this.generateSeedFrameMesh(projId, seedRes, settings);
+      }
+    }
+
+    // 2. Modo Cuadrilátero 4 Bordes Cinta
     if (settings.meshMode === 'tape' && settings.tapeCorners) {
       return this.generateQuadrilateralMesh(projId, settings.tapeCorners, settings);
     }

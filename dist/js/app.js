@@ -55,6 +55,14 @@
       designElev: 0,
       reading: null,
       idealReading: null
+    },
+    quadFocus: {
+      activeCell: null,
+      dX: 0.0,
+      dY: 0.0,
+      stepSize: 0.50,
+      isDragging: false,
+      calibDrawerOpen: false
     }
   };
 
@@ -125,6 +133,49 @@
     dom.cadStatusBadge = document.getElementById('cad-status-badge');
     dom.cadBtnSavePoint = document.getElementById('cad-btn-save-point');
     dom.cadBtnExitBottom = document.getElementById('cad-btn-exit-bottom');
+    dom.canvasBtnOpenQuad = document.getElementById('canvas-btn-open-quad');
+    dom.cadBtnOpenQuad = document.getElementById('cad-btn-open-quad');
+
+    // Elementos de la Vista Enfocada de Cuadrante (4 Estacas)
+    dom.viewQuadFocused = document.getElementById('view-quad-focused');
+    dom.quadBtnBack = document.getElementById('quad-btn-back');
+    dom.quadBtnPrevCell = document.getElementById('quad-btn-prev-cell');
+    dom.quadBtnNextCell = document.getElementById('quad-btn-next-cell');
+    dom.quadCellSelect = document.getElementById('quad-cell-select');
+    dom.quadBtnCenterPointer = document.getElementById('quad-btn-center-pointer');
+    dom.quadActiveTag = document.getElementById('quad-active-tag');
+    dom.quadCanvas = document.getElementById('quad-canvas');
+    dom.quadHiDisplay = document.getElementById('quad-hi-display');
+    dom.rodCrosshairLine = document.getElementById('rod-crosshair-line');
+    dom.rodCrosshairTag = document.getElementById('rod-crosshair-tag');
+    dom.quadIdealReading = document.getElementById('quad-ideal-reading');
+    dom.quadDesignElev = document.getElementById('quad-design-elev');
+    dom.quadOffsetsSummary = document.getElementById('quad-offsets-summary');
+    dom.quadHiAlert = document.getElementById('quad-hi-alert');
+    dom.quadHiAlertText = document.getElementById('quad-hi-alert-text');
+    dom.quadBtnOpenCalib = document.getElementById('quad-btn-open-calib');
+    dom.quadCalibDrawer = document.getElementById('quad-calib-drawer');
+    dom.quadCalibStakeSel = document.getElementById('quad-calib-stake-sel');
+    dom.quadCalibReadingInput = document.getElementById('quad-calib-reading-input');
+    dom.quadCalibAngleInput = document.getElementById('quad-calib-angle-input');
+    dom.quadBtnApplyCalib = document.getElementById('quad-btn-apply-calib');
+    dom.quadBtnCancelCalib = document.getElementById('quad-btn-cancel-calib');
+    dom.quadStepChoices = document.querySelectorAll('.quad-step-choice');
+    dom.quadDpadUp = document.getElementById('quad-dpad-up');
+    dom.quadDpadDown = document.getElementById('quad-dpad-down');
+    dom.quadDpadLeft = document.getElementById('quad-dpad-left');
+    dom.quadDpadRight = document.getElementById('quad-dpad-right');
+    dom.quadDpadCenter = document.getElementById('quad-dpad-center');
+    dom.quadInpDx = document.getElementById('quad-inp-dx');
+    dom.quadInpDy = document.getElementById('quad-inp-dy');
+    dom.quadDistCorner1 = document.getElementById('quad-dist-corner-1');
+    dom.quadDistCorner2 = document.getElementById('quad-dist-corner-2');
+    dom.quadDistCorner3 = document.getElementById('quad-dist-corner-3');
+    dom.quadDistCorner4 = document.getElementById('quad-dist-corner-4');
+    dom.quadActualReading = document.getElementById('quad-actual-reading');
+    dom.quadStatusBadge = document.getElementById('quad-status-badge');
+    dom.quadBtnSavePoint = document.getElementById('quad-btn-save-point');
+    dom.quadBtnExitBottom = document.getElementById('quad-btn-exit-bottom');
 
     // Tab Configuración
     dom.cfgPondName = document.getElementById('cfg-pond-name');
@@ -1155,6 +1206,797 @@
     renderCanvas2D();
     alert(`✓ Punto Auxiliar guardado:\n${aux.code}\nCota Rasante: ${aux.designElevation.toFixed(3)}m` +
       (hasReading ? `\nLectura Real: ${realReading.toFixed(3)}m\nCorte/Relleno: ${(cutFill > 0 ? '+' : '') + cutFill.toFixed(3)}m` : ''));
+  }
+
+  // --- VISTA ENFOCADA DE CUADRANTE (4 ESTACAS) CON PANTALLA DIVIDIDA Y CRUCETA DIRECCIONAL ---
+  function buildLakeCells() {
+    if (!state.stakes || state.stakes.length === 0) return [];
+    const cells = [];
+    const stakeMap = new Map();
+    state.stakes.forEach(s => {
+      stakeMap.set(`${s.row}_${s.col}`, s);
+    });
+
+    const rows = [...new Set(state.stakes.map(s => s.row))].sort((a, b) => a - b);
+    for (let rIdx = 0; rIdx < rows.length - 1; rIdx++) {
+      const r = rows[rIdx];
+      const nextR = rows[rIdx + 1];
+      const stakesInRow = state.stakes.filter(s => s.row === r).sort((a, b) => a.col - b.col);
+      for (let cIdx = 0; cIdx < stakesInRow.length - 1; cIdx++) {
+        const c = stakesInRow[cIdx].col;
+        const nextC = stakesInRow[cIdx + 1].col;
+
+        const p00 = stakeMap.get(`${r}_${c}`);
+        const p10 = stakeMap.get(`${r}_${nextC}`);
+        const p01 = stakeMap.get(`${nextR}_${c}`);
+        const p11 = stakeMap.get(`${nextR}_${nextC}`);
+
+        if (p00 && p10 && p01 && p11) {
+          const id = `cell_${p00.id}_${p11.id}`;
+          const label = `${p00.code.replace('-', '')} — ${p10.code.replace('-', '')} — ${p01.code.replace('-', '')} — ${p11.code.replace('-', '')}`;
+          cells.push({
+            id,
+            label,
+            type: 'quad',
+            p00, // Esquina Base Inferior Izquierda (ej. A1)
+            p10, // Esquina Inferior Derecha (ej. A2)
+            p01, // Esquina Superior Izquierda (ej. B1)
+            p11, // Esquina Superior Derecha (ej. B2)
+            stakes: [p00, p10, p11, p01] // Orden perimetral
+          });
+        } else if (p00 && p10 && (p01 || p11)) {
+          const third = p01 || p11;
+          const id = `cell_tri_${p00.id}_${p10.id}_${third.id}`;
+          const label = `▲ ${p00.code.replace('-', '')} — ${p10.code.replace('-', '')} — ${third.code.replace('-', '')}`;
+          cells.push({
+            id,
+            label,
+            type: 'triangle',
+            p00,
+            p10,
+            p01: third,
+            p11: third,
+            stakes: [p00, p10, third]
+          });
+        }
+      }
+    }
+    return cells;
+  }
+
+  function isPointInsidePolygon(x, y, stakes) {
+    if (!stakes || stakes.length < 3) return false;
+    let inside = false;
+    for (let i = 0, j = stakes.length - 1; i < stakes.length; j = i++) {
+      const xi = stakes[i].x, yi = stakes[i].y;
+      const xj = stakes[j].x, yj = stakes[j].y;
+      const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function findCellAtPondPos(pondX, pondY) {
+    const cells = buildLakeCells();
+    if (cells.length === 0) return null;
+
+    for (const cell of cells) {
+      if (isPointInsidePolygon(pondX, pondY, cell.stakes)) {
+        return cell;
+      }
+    }
+
+    let closestCell = cells[0];
+    let minDist = Infinity;
+    for (const cell of cells) {
+      const cx = (cell.p00.x + cell.p10.x + cell.p01.x + cell.p11.x) / 4;
+      const cy = (cell.p00.y + cell.p10.y + cell.p01.y + cell.p11.y) / 4;
+      const d = Math.hypot(pondX - cx, pondY - cy);
+      if (d < minDist) {
+        minDist = d;
+        closestCell = cell;
+      }
+    }
+    return closestCell;
+  }
+
+  function populateQuadCellSelect(selectedId = null) {
+    if (!dom.quadCellSelect) return;
+    const cells = buildLakeCells();
+    let html = '';
+    cells.forEach(cell => {
+      const isSel = (selectedId && cell.id === selectedId) ? 'selected' : '';
+      html += `<option value="${cell.id}" ${isSel}>${cell.label}</option>`;
+    });
+    dom.quadCellSelect.innerHTML = html;
+  }
+
+  function resizeQuadCanvas() {
+    const canvas = dom.quadCanvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(300, Math.round(rect.width * dpr));
+    const h = Math.max(200, Math.round(rect.height * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+  }
+
+  function openQuadFocusedView(targetCell = null) {
+    const cells = buildLakeCells();
+    if (cells.length === 0) {
+      alert('Se requieren al menos 3 o 4 estacas adyacentes para formar un cuadro.');
+      return;
+    }
+
+    const cell = targetCell || cells[0];
+    state.quadFocus.activeCell = cell;
+
+    populateQuadCellSelect(cell.id);
+
+    // Calcular dimensiones base
+    const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
+    const LX = Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0;
+    const LY = Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0;
+
+    // Iniciar el puntero en el centro exacto del cuadro
+    state.quadFocus.dX = Math.round((LX / 2) * 20) / 20;
+    state.quadFocus.dY = Math.round((LY / 2) * 20) / 20;
+
+    if (dom.quadActiveTag) {
+      dom.quadActiveTag.textContent = `CUADRANTE: ${cell.label}`;
+    }
+
+    // Poblar dropdown de calibración rápida con las estacas del cuadrante
+    if (dom.quadCalibStakeSel) {
+      let calibOpts = '';
+      cell.stakes.forEach(s => {
+        calibOpts += `<option value="${s.id}">${s.code.replace('-', '')} (Z=${s.designElevation.toFixed(3)}m)</option>`;
+      });
+      dom.quadCalibStakeSel.innerHTML = calibOpts;
+    }
+
+    if (dom.quadCalibDrawer) dom.quadCalibDrawer.style.display = 'none';
+    if (dom.quadActualReading) dom.quadActualReading.value = '';
+
+    dom.viewQuadFocused.style.display = 'flex';
+
+    resizeQuadCanvas();
+    updateQuadCalculations();
+    renderQuadCanvas();
+
+    pushNavigationState(state.currentTab, 'quad-focused-view');
+  }
+
+  function closeQuadFocusedView() {
+    if (dom.viewQuadFocused) dom.viewQuadFocused.style.display = 'none';
+    if (history.state && history.state.modal === 'quad-focused-view') {
+      history.back();
+    }
+    renderCanvas2D();
+  }
+
+  function switchQuadCell(cell) {
+    if (!cell) return;
+    state.quadFocus.activeCell = cell;
+    if (dom.quadCellSelect) dom.quadCellSelect.value = cell.id;
+    if (dom.quadActiveTag) dom.quadActiveTag.textContent = `CUADRANTE: ${cell.label}`;
+
+    // Calcular dimensiones base y centrar
+    const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
+    const LX = Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0;
+    const LY = Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0;
+    state.quadFocus.dX = Math.round((LX / 2) * 20) / 20;
+    state.quadFocus.dY = Math.round((LY / 2) * 20) / 20;
+
+    // Actualizar selector de calibración
+    if (dom.quadCalibStakeSel) {
+      let calibOpts = '';
+      cell.stakes.forEach(s => {
+        calibOpts += `<option value="${s.id}">${s.code.replace('-', '')} (Z=${s.designElevation.toFixed(3)}m)</option>`;
+      });
+      dom.quadCalibStakeSel.innerHTML = calibOpts;
+    }
+
+    updateQuadCalculations();
+    renderQuadCanvas();
+  }
+
+  function updateQuadCalculations() {
+    const cell = state.quadFocus.activeCell;
+    if (!cell) return;
+
+    const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01, p11 = cell.p11;
+    const vXx = p10.x - p00.x, vXy = p10.y - p00.y;
+    const LX = Math.hypot(vXx, vXy) || 15.0;
+    const uXx = vXx / LX, uXy = vXy / LX;
+
+    const vYx = p01.x - p00.x, vYy = p01.y - p00.y;
+    const LY = Math.hypot(vYx, vYy) || 15.0;
+    const uYx = vYx / LY, uYy = vYy / LY;
+
+    // Limitar dX y dY con margen
+    const dX = Math.max(-2.0, Math.min(LX + 2.0, state.quadFocus.dX));
+    const dY = Math.max(-2.0, Math.min(LY + 2.0, state.quadFocus.dY));
+    state.quadFocus.dX = dX;
+    state.quadFocus.dY = dY;
+
+    // Calcular posición real del puntero
+    const targetX = p00.x + (dX * uXx) + (dY * uYx);
+    const targetY = p00.y + (dX * uXy) + (dY * uYy);
+    state.quadFocus.targetX = targetX;
+    state.quadFocus.targetY = targetY;
+
+    // Actualizar inputs directos
+    if (dom.quadInpDx && document.activeElement !== dom.quadInpDx) {
+      dom.quadInpDx.value = dX.toFixed(2);
+    }
+    if (dom.quadInpDy && document.activeElement !== dom.quadInpDy) {
+      dom.quadInpDy.value = dY.toFixed(2);
+    }
+    if (dom.quadOffsetsSummary) {
+      dom.quadOffsetsSummary.textContent = `dX=${dX >= 0 ? '+' : ''}${dX.toFixed(2)}m, dY=${dY >= 0 ? '+' : ''}${dY.toFixed(2)}m`;
+    }
+
+    // Calcular distancias a las 4 esquinas
+    const dist1 = Math.hypot(targetX - p00.x, targetY - p00.y);
+    const dist2 = Math.hypot(targetX - p10.x, targetY - p10.y);
+    const dist3 = Math.hypot(targetX - p01.x, targetY - p01.y);
+    const dist4 = Math.hypot(targetX - p11.x, targetY - p11.y);
+
+    if (dom.quadDistCorner1) dom.quadDistCorner1.textContent = `d${p00.code.replace('-', '')}: ${dist1.toFixed(2)}m`;
+    if (dom.quadDistCorner2) dom.quadDistCorner2.textContent = `d${p10.code.replace('-', '')}: ${dist2.toFixed(2)}m`;
+    if (dom.quadDistCorner3) dom.quadDistCorner3.textContent = `d${p01.code.replace('-', '')}: ${dist3.toFixed(2)}m`;
+    if (dom.quadDistCorner4) dom.quadDistCorner4.textContent = `d${p11.code.replace('-', '')}: ${dist4.toFixed(2)}m`;
+
+    // Calcular Cota de Diseño (Rasante) exacta en este punto
+    const calcResult = window.TopoMath.calculateDesignElevationAtCoord(targetX, targetY, state.project.settings, state.stakes);
+    const designElev = calcResult.elevation;
+    state.quadFocus.designElev = designElev;
+
+    if (dom.quadDesignElev) {
+      dom.quadDesignElev.textContent = `${designElev.toFixed(3)} m`;
+    }
+
+    // Altura Instrumental HI y Validación Automática
+    const hasStation = state.activeStation && typeof state.activeStation.hi === 'number';
+    const hi = hasStation ? state.activeStation.hi : null;
+
+    if (dom.quadHiDisplay) {
+      dom.quadHiDisplay.textContent = hasStation ? `HI = ${hi.toFixed(3)} m` : 'HI: Sin Armada';
+    }
+
+    if (hasStation) {
+      const idealReading = hi - designElev;
+      state.quadFocus.idealReading = idealReading;
+
+      // Validación de HI: si da negativo o mayor a 5m (desfase por ejemplo BM 103m vs Rasante 408m)
+      if (idealReading < 0 || idealReading > 5.0) {
+        if (dom.quadHiAlert) {
+          dom.quadHiAlert.style.display = 'flex';
+          dom.quadHiAlertText.textContent = `El HI actual (${hi.toFixed(2)}m) es incompatible con la rasante (${designElev.toFixed(2)}m), dando ${idealReading.toFixed(3)}m. Calibre el teodolito con una estaca conocida.`;
+        }
+        if (dom.quadIdealReading) {
+          dom.quadIdealReading.textContent = `${idealReading.toFixed(3)} m`;
+          dom.quadIdealReading.style.color = '#ef4444';
+        }
+      } else {
+        if (dom.quadHiAlert) dom.quadHiAlert.style.display = 'none';
+        if (dom.quadIdealReading) {
+          dom.quadIdealReading.textContent = `${idealReading.toFixed(3)} m`;
+          dom.quadIdealReading.style.color = '#00ff88';
+        }
+      }
+
+      // Regla Estadimétrica: posicionar hilo central
+      if (dom.rodCrosshairLine) {
+        const rodFraction = Math.max(0.05, Math.min(0.95, 1.0 - (idealReading / 3.0)));
+        dom.rodCrosshairLine.style.top = `${(rodFraction * 100).toFixed(1)}%`;
+      }
+      if (dom.rodCrosshairTag) {
+        dom.rodCrosshairTag.textContent = `${idealReading.toFixed(3)}m`;
+      }
+    } else {
+      if (dom.quadHiAlert) {
+        dom.quadHiAlert.style.display = 'flex';
+        dom.quadHiAlertText.textContent = 'Configure o calibre una Armada / HI para calcular la lectura en mira.';
+      }
+      if (dom.quadIdealReading) {
+        dom.quadIdealReading.textContent = '---.--- m';
+        dom.quadIdealReading.style.color = '#94a3b8';
+      }
+      state.quadFocus.idealReading = null;
+    }
+
+    // Evaluación de Lectura Real
+    const readingVal = parseFloat(dom.quadActualReading?.value);
+    if (!isNaN(readingVal) && isFinite(readingVal) && hasStation) {
+      const actualElev = hi - readingVal;
+      const cutFill = actualElev - designElev;
+      const tolMeters = (state.project.settings.toleranceCm || 2.0) / 100;
+      const evalRes = window.TopoMath.evaluateStatus(cutFill, tolMeters);
+
+      if (dom.quadStatusBadge) {
+        dom.quadStatusBadge.className = `cad-status-badge ${evalRes.status.toLowerCase()}`;
+        dom.quadStatusBadge.textContent = `${evalRes.label} (${cutFill > 0 ? '+' : ''}${cutFill.toFixed(3)}m)`;
+      }
+    } else {
+      if (dom.quadStatusBadge) {
+        dom.quadStatusBadge.className = 'cad-status-badge pendiente';
+        dom.quadStatusBadge.textContent = 'SIN MEDIR';
+      }
+    }
+  }
+
+  function renderQuadCanvas() {
+    const canvas = dom.quadCanvas;
+    if (!canvas) return;
+    resizeQuadCanvas();
+
+    const cell = state.quadFocus.activeCell;
+    if (!cell) return;
+
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const dpr = window.devicePixelRatio || 1;
+    const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01, p11 = cell.p11;
+    const allStakes = [p00, p10, p11, p01];
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    allStakes.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    });
+
+    const marginM = 2.2;
+    minX -= marginM; maxX += marginM;
+    minY -= marginM; maxY += marginM;
+
+    const spanX = Math.max(10, maxX - minX);
+    const spanY = Math.max(10, maxY - minY);
+    const pad = 42 * dpr;
+
+    const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY);
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+
+    const toPx = (x, y) => ({
+      x: w / 2 + (x - midX) * scale,
+      y: h / 2 - (y - midY) * scale
+    });
+
+    const fromPx = (px, py) => ({
+      x: midX + (px - w / 2) / scale,
+      y: midY - (py - h / 2) / scale
+    });
+
+    state.quadFocus.toPx = toPx;
+    state.quadFocus.fromPx = fromPx;
+
+    const pt00 = toPx(p00.x, p00.y);
+    const pt10 = toPx(p10.x, p10.y);
+    const pt11 = toPx(p11.x, p11.y);
+    const pt01 = toPx(p01.x, p01.y);
+
+    // 1. Relleno interior del cuadrante
+    ctx.beginPath();
+    ctx.moveTo(pt00.x, pt00.y);
+    ctx.lineTo(pt10.x, pt10.y);
+    ctx.lineTo(pt11.x, pt11.y);
+    ctx.lineTo(pt01.x, pt01.y);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(14, 165, 233, 0.12)';
+    ctx.fill();
+
+    // 2. Cuadrícula interna tenue cada 1.0 metro
+    const LX = Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0;
+    const LY = Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0;
+
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+
+    for (let m = 1; m < LX; m += 1) {
+      const frac = m / LX;
+      const bX = p00.x + frac * (p10.x - p00.x);
+      const bY = p00.y + frac * (p10.y - p00.y);
+      const tX = p01.x + frac * (p11.x - p01.x);
+      const tY = p01.y + frac * (p11.y - p01.y);
+      const pBot = toPx(bX, bY);
+      const pTop = toPx(tX, tY);
+      ctx.beginPath();
+      ctx.moveTo(pBot.x, pBot.y);
+      ctx.lineTo(pTop.x, pTop.y);
+      ctx.stroke();
+    }
+
+    for (let n = 1; n < LY; n += 1) {
+      const frac = n / LY;
+      const lX = p00.x + frac * (p01.x - p00.x);
+      const lY = p00.y + frac * (p01.y - p00.y);
+      const rX = p10.x + frac * (p11.x - p10.x);
+      const rY = p10.y + frac * (p11.y - p10.y);
+      const pLeft = toPx(lX, lY);
+      const pRight = toPx(rX, rY);
+      ctx.beginPath();
+      ctx.moveTo(pLeft.x, pLeft.y);
+      ctx.lineTo(pRight.x, pRight.y);
+      ctx.stroke();
+    }
+
+    // 3. Diagonal suave del cuadro
+    ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(pt00.x, pt00.y);
+    ctx.lineTo(pt11.x, pt11.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 4. Perímetro del Cuadro
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pt00.x, pt00.y);
+    ctx.lineTo(pt10.x, pt10.y);
+    ctx.lineTo(pt11.x, pt11.y);
+    ctx.lineTo(pt01.x, pt01.y);
+    ctx.closePath();
+    ctx.stroke();
+
+    // 5. Rótulos de Longitud de Lados en los 4 bordes
+    const drawSideBadge = (pA, pB, label) => {
+      const mx = (pA.x + pB.x) / 2;
+      const my = (pA.y + pB.y) / 2;
+      ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
+      const tw = ctx.measureText(label).width + 10;
+      const th = 18 * dpr;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(mx - tw / 2, my - th / 2, tw, th, 4 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, mx, my);
+    };
+
+    drawSideBadge(pt00, pt10, `${LX.toFixed(2)}m`);
+    drawSideBadge(pt00, pt01, `${LY.toFixed(2)}m`);
+    drawSideBadge(pt01, pt11, `${Math.hypot(p11.x - p01.x, p11.y - p01.y).toFixed(2)}m`);
+    drawSideBadge(pt10, pt11, `${Math.hypot(p11.x - p10.x, p11.y - p10.y).toFixed(2)}m`);
+
+    // 6. Dibujar las 4 Estacas en las Esquinas
+    const drawStakeNode = (pt, stake, posLabel) => {
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 8 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#0284c7';
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 3 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+
+      const cleanCode = stake.code.replace('-', '');
+      const zStr = `Z=${stake.designElevation.toFixed(3)}m`;
+      ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+      const codeW = ctx.measureText(cleanCode).width;
+      ctx.font = `${Math.max(8, 9 * dpr)}px monospace`;
+      const zW = ctx.measureText(zStr).width;
+      const bW = Math.max(codeW, zW) + 12;
+      const bH = 30 * dpr;
+
+      let bx = pt.x - bW / 2;
+      let by = pt.y - 14 * dpr - bH;
+      if (posLabel === 'bot') by = pt.y + 14 * dpr;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bW, bH, 5 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(cleanCode, bx + bW / 2, by + 3 * dpr);
+
+      ctx.font = `${Math.max(8, 9 * dpr)}px monospace`;
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText(zStr, bx + bW / 2, by + 16 * dpr);
+    };
+
+    drawStakeNode(pt00, p00, 'bot');
+    drawStakeNode(pt10, p10, 'bot');
+    drawStakeNode(pt01, p01, 'top');
+    drawStakeNode(pt11, p11, 'top');
+
+    // 7. Dibujar el Marcador / Puntero del Cadenero
+    const targetX = state.quadFocus.targetX ?? (p00.x + LX / 2);
+    const targetY = state.quadFocus.targetY ?? (p00.y + LY / 2);
+    const ptTarget = toPx(targetX, targetY);
+
+    const dX = state.quadFocus.dX || 0;
+    const dY = state.quadFocus.dY || 0;
+    const vXx_norm = (p10.x - p00.x) / LX;
+    const vXy_norm = (p10.y - p00.y) / LX;
+    const cornerProjX = p00.x + (dX * vXx_norm);
+    const cornerProjY = p00.y + (dX * vXy_norm);
+    const ptCornerProj = toPx(cornerProjX, cornerProjY);
+
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([5, 4]);
+
+    // Línea dX
+    ctx.strokeStyle = '#f43f5e';
+    ctx.beginPath();
+    ctx.moveTo(pt00.x, pt00.y);
+    ctx.lineTo(ptCornerProj.x, ptCornerProj.y);
+    ctx.stroke();
+
+    const midDX_x = (pt00.x + ptCornerProj.x) / 2;
+    const midDX_y = (pt00.y + ptCornerProj.y) / 2;
+    ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+    ctx.fillStyle = '#f43f5e';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`dX = ${dX.toFixed(2)}m`, midDX_x, midDX_y - 4);
+
+    // Línea dY
+    ctx.strokeStyle = '#fb923c';
+    ctx.beginPath();
+    ctx.moveTo(ptCornerProj.x, ptCornerProj.y);
+    ctx.lineTo(ptTarget.x, ptTarget.y);
+    ctx.stroke();
+
+    const midDY_x = (ptCornerProj.x + ptTarget.x) / 2;
+    const midDY_y = (ptCornerProj.y + ptTarget.y) / 2;
+    ctx.fillStyle = '#fb923c';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`dY = ${dY.toFixed(2)}m`, midDY_x + 6, midDY_y);
+    ctx.setLineDash([]);
+
+    // Halo fluorescente pulsante en el puntero
+    const haloRadius = 26 * dpr;
+    const grad = ctx.createRadialGradient(ptTarget.x, ptTarget.y, 4, ptTarget.x, ptTarget.y, haloRadius);
+    grad.addColorStop(0, 'rgba(244, 63, 94, 0.55)');
+    grad.addColorStop(0.6, 'rgba(251, 146, 60, 0.25)');
+    grad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(ptTarget.x, ptTarget.y, haloRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Círculo exterior fucsia
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(ptTarget.x, ptTarget.y, 14 * dpr, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Círculo interior naranja
+    ctx.strokeStyle = '#fb923c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ptTarget.x, ptTarget.y, 7 * dpr, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Cruz / Retículo del teodolito
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(ptTarget.x, ptTarget.y - 7 * dpr); ctx.lineTo(ptTarget.x, ptTarget.y - 20 * dpr);
+    ctx.moveTo(ptTarget.x, ptTarget.y + 7 * dpr); ctx.lineTo(ptTarget.x, ptTarget.y + 20 * dpr);
+    ctx.moveTo(ptTarget.x - 7 * dpr, ptTarget.y); ctx.lineTo(ptTarget.x - 20 * dpr, ptTarget.y);
+    ctx.moveTo(ptTarget.x + 7 * dpr, ptTarget.y); ctx.lineTo(ptTarget.x + 20 * dpr, ptTarget.y);
+    ctx.stroke();
+
+    // Punto blanco central
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(ptTarget.x, ptTarget.y, 2.5 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rótulo flotante de Lectura Ideal
+    const idealVal = state.quadFocus.idealReading;
+    const l1 = `🎯 MIRA: ${idealVal !== null && !isNaN(idealVal) ? idealVal.toFixed(3) + 'm' : '---'}`;
+    const l2 = `Z_ras = ${(state.quadFocus.designElev || 0).toFixed(3)}m`;
+
+    ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+    const w1 = ctx.measureText(l1).width;
+    ctx.font = `bold ${Math.max(9, 10 * dpr)}px monospace`;
+    const w2 = ctx.measureText(l2).width;
+    const cardW = Math.max(w1, w2) + 16 * dpr;
+    const cardH = 34 * dpr;
+    const cardX = ptTarget.x - cardW / 2;
+    const cardY = ptTarget.y - 22 * dpr - cardH;
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(cardX, cardY, cardW, cardH, 6 * dpr);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+    ctx.beginPath();
+    ctx.moveTo(ptTarget.x - 5 * dpr, cardY + cardH);
+    ctx.lineTo(ptTarget.x + 5 * dpr, cardY + cardH);
+    ctx.lineTo(ptTarget.x, cardY + cardH + 5 * dpr);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+    ctx.fillStyle = '#f43f5e';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(l1, ptTarget.x, cardY + 4 * dpr);
+
+    ctx.font = `bold ${Math.max(9, 10 * dpr)}px monospace`;
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillText(l2, ptTarget.x, cardY + 18 * dpr);
+  }
+
+  function handleQuadCanvasTouch(clientX, clientY) {
+    const canvas = dom.quadCanvas;
+    if (!canvas || !state.quadFocus.activeCell || !state.quadFocus.fromPx) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = (clientX - rect.left) * (canvas.width / rect.width);
+    const py = (clientY - rect.top) * (canvas.height / rect.height);
+
+    const world = state.quadFocus.fromPx(px, py);
+    const cell = state.quadFocus.activeCell;
+    const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
+
+    const vXx = p10.x - p00.x, vXy = p10.y - p00.y;
+    const LX = Math.hypot(vXx, vXy) || 15.0;
+    const uXx = vXx / LX, uXy = vXy / LX;
+
+    const vYx = p01.x - p00.x, vYy = p01.y - p00.y;
+    const LY = Math.hypot(vYx, vYy) || 15.0;
+    const uYx = vYx / LY, uYy = vYy / LY;
+
+    const deltaX = world.x - p00.x;
+    const deltaY = world.y - p00.y;
+    const det = (uXx * uYy) - (uXy * uYx);
+
+    if (Math.abs(det) > 1e-5) {
+      const dx = (deltaX * uYy - deltaY * uYx) / det;
+      const dy = (uXx * deltaY - uXy * deltaX) / det;
+      state.quadFocus.dX = Math.round(dx * 20) / 20;
+      state.quadFocus.dY = Math.round(dy * 20) / 20;
+      updateQuadCalculations();
+      renderQuadCanvas();
+    }
+  }
+
+  function attachDpadContinuousListener(buttonEl, onStep) {
+    if (!buttonEl) return;
+    let timer = null;
+    let interval = null;
+
+    const start = (e) => {
+      e.preventDefault();
+      onStep();
+      timer = setTimeout(() => {
+        interval = setInterval(onStep, 100);
+      }, 350);
+    };
+
+    const stop = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (interval) { clearInterval(interval); interval = null; }
+    };
+
+    buttonEl.addEventListener('pointerdown', start);
+    buttonEl.addEventListener('pointerup', stop);
+    buttonEl.addEventListener('pointerleave', stop);
+    buttonEl.addEventListener('pointercancel', stop);
+  }
+
+  function saveQuadAuxPoint() {
+    const cell = state.quadFocus.activeCell;
+    if (!cell) return;
+
+    const p00 = cell.p00;
+    const dx = state.quadFocus.dX;
+    const dy = state.quadFocus.dY;
+    const realReading = parseFloat(dom.quadActualReading?.value);
+    const hasReading = !isNaN(realReading) && isFinite(realReading);
+    const hasStation = state.activeStation && typeof state.activeStation.hi === 'number';
+    const actualElev = (hasReading && hasStation) ? (state.activeStation.hi - realReading) : null;
+    const cutFill = actualElev !== null ? (actualElev - state.quadFocus.designElev) : null;
+
+    const aux = {
+      id: 'aux_' + Date.now(),
+      code: `AUX-${p00.code.replace('-', '')}+(${dx.toFixed(2)},${dy.toFixed(2)})`,
+      baseStakeId: p00.id,
+      baseStakeCode: p00.code,
+      cellId: cell.id,
+      dx,
+      dy,
+      x: state.quadFocus.targetX,
+      y: state.quadFocus.targetY,
+      designElevation: state.quadFocus.designElev,
+      reading: hasReading ? realReading : null,
+      actualElevation: actualElev,
+      cutFill: cutFill,
+      timestamp: Date.now()
+    };
+
+    state.auxPoints.push(aux);
+    if (state.project && window.topoDB) {
+      window.topoDB.saveAuxPoint(aux);
+    }
+
+    alert(`✓ Punto Auxiliar guardado en el Cuadro:\n${aux.code}\nCota Rasante: ${aux.designElevation.toFixed(3)}m` +
+      (hasReading ? `\nLectura Real: ${realReading.toFixed(3)}m\nCorte/Relleno: ${(cutFill > 0 ? '+' : '') + cutFill.toFixed(3)}m` : ''));
+  }
+
+  function applyQuadCalibration() {
+    const stakeId = dom.quadCalibStakeSel.value;
+    const stake = state.stakes.find(s => s.id === stakeId) || (state.quadFocus.activeCell ? state.quadFocus.activeCell.p00 : null);
+    if (!stake) {
+      alert('Seleccione una estaca de referencia válida.');
+      return;
+    }
+
+    const reading = parseFloat(dom.quadCalibReadingInput.value);
+    if (isNaN(reading) || reading <= 0) {
+      alert('Ingrese una lectura de mira válida en metros (ej. 1.750).');
+      return;
+    }
+
+    const newHI = stake.designElevation + reading;
+    if (!state.activeStation) {
+      state.activeStation = {
+        name: `Armada Teodolito (${stake.code.replace('-', '')})`,
+        bmElevation: stake.designElevation,
+        backsight: reading,
+        hi: newHI,
+        timestamp: Date.now()
+      };
+      state.stations.push(state.activeStation);
+    } else {
+      state.activeStation.bmElevation = stake.designElevation;
+      state.activeStation.backsight = reading;
+      state.activeStation.hi = newHI;
+    }
+
+    if (window.topoDB) {
+      window.topoDB.saveStation(state.activeStation);
+    }
+
+    updateHeaderBanner();
+    if (dom.quadCalibDrawer) dom.quadCalibDrawer.style.display = 'none';
+
+    updateQuadCalculations();
+    renderQuadCanvas();
+
+    alert(`✓ Teodolito calibrado con éxito:\nEstaca: ${stake.code}\nCota BM: ${stake.designElevation.toFixed(3)} m\nLectura V+: ${reading.toFixed(3)} m\nNuevo HI = ${newHI.toFixed(3)} m`);
   }
 
   // --- MOTOR GRÁFICO DEL PLANO 2D ESCALA REAL (TIN / DELAUNAY CON VISTA ROTABLE) ---
@@ -3536,6 +4378,12 @@
       const targetModal = event.state?.modal || null;
       const targetTab = event.state?.tab || 'tab-grid';
 
+      // 0. Manejo de Vista Enfocada de Cuadrante (4 Estacas)
+      if (dom.viewQuadFocused && dom.viewQuadFocused.style.display !== 'none' && targetModal !== 'quad-focused-view') {
+        dom.viewQuadFocused.style.display = 'none';
+        renderCanvas2D();
+      }
+
       // 1. Manejo de Modo Cadenero
       if (state.cadeneroMode && targetModal !== 'cadenero-mode') {
         state.cadeneroMode = false;
@@ -3545,7 +4393,7 @@
       }
 
       // 2. Manejo de Pantalla Completa
-      if (state.isFullscreenMap && targetModal !== 'fullscreen-map' && targetModal !== 'cadenero-mode') {
+      if (state.isFullscreenMap && targetModal !== 'fullscreen-map' && targetModal !== 'cadenero-mode' && targetModal !== 'quad-focused-view') {
         exitFullscreenMap(false);
       }
 
@@ -3558,7 +4406,9 @@
 
       // 4. Si el historial apunta a un modal que estaba antes abierto, reabrirlo
       if (targetModal && curModal !== targetModal) {
-        if (targetModal === 'cadenero-mode') {
+        if (targetModal === 'quad-focused-view') {
+          openQuadFocusedView();
+        } else if (targetModal === 'cadenero-mode') {
           openCadeneroMode();
         } else if (targetModal === 'fullscreen-map') {
           enterFullscreenMap(false);
@@ -3870,6 +4720,176 @@
     if (dom.cadDyInput) dom.cadDyInput.addEventListener('input', () => { updateCadeneroCalculations(); renderCanvas2D(); });
     if (dom.cadReadingInput) dom.cadReadingInput.addEventListener('input', () => { updateCadeneroCalculations(); });
     if (dom.cadBtnSavePoint) dom.cadBtnSavePoint.addEventListener('click', saveCadeneroAuxPoint);
+
+    // Botones para abrir la Vista Enfocada de Cuadrante (4 Estacas)
+    if (dom.canvasBtnOpenQuad) {
+      dom.canvasBtnOpenQuad.addEventListener('click', () => {
+        const cell = state.quadFocus.activeCell || buildLakeCells()[0];
+        openQuadFocusedView(cell);
+      });
+    }
+    if (dom.cadBtnOpenQuad) {
+      dom.cadBtnOpenQuad.addEventListener('click', () => {
+        let cell = null;
+        if (state.cadenero.baseStake) {
+          cell = findCellAtPondPos(state.cadenero.baseStake.x, state.cadenero.baseStake.y);
+        }
+        openQuadFocusedView(cell || buildLakeCells()[0]);
+      });
+    }
+
+    // Navegación y controles de la Vista Enfocada de Cuadrante
+    if (dom.quadBtnBack) dom.quadBtnBack.addEventListener('click', closeQuadFocusedView);
+    if (dom.quadBtnExitBottom) dom.quadBtnExitBottom.addEventListener('click', closeQuadFocusedView);
+
+    if (dom.quadBtnCenterPointer) {
+      dom.quadBtnCenterPointer.addEventListener('click', () => {
+        if (!state.quadFocus.activeCell) return;
+        const p00 = state.quadFocus.activeCell.p00, p10 = state.quadFocus.activeCell.p10, p01 = state.quadFocus.activeCell.p01;
+        const LX = Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0;
+        const LY = Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0;
+        state.quadFocus.dX = Math.round((LX / 2) * 20) / 20;
+        state.quadFocus.dY = Math.round((LY / 2) * 20) / 20;
+        updateQuadCalculations();
+        renderQuadCanvas();
+      });
+    }
+
+    if (dom.quadCellSelect) {
+      dom.quadCellSelect.addEventListener('change', () => {
+        const selectedId = dom.quadCellSelect.value;
+        const cells = buildLakeCells();
+        const found = cells.find(c => c.id === selectedId);
+        if (found) switchQuadCell(found);
+      });
+    }
+
+    if (dom.quadBtnPrevCell) {
+      dom.quadBtnPrevCell.addEventListener('click', () => {
+        const cells = buildLakeCells();
+        if (cells.length === 0) return;
+        const curIdx = cells.findIndex(c => c.id === state.quadFocus.activeCell?.id);
+        const prevIdx = (curIdx - 1 + cells.length) % cells.length;
+        switchQuadCell(cells[prevIdx]);
+      });
+    }
+
+    if (dom.quadBtnNextCell) {
+      dom.quadBtnNextCell.addEventListener('click', () => {
+        const cells = buildLakeCells();
+        if (cells.length === 0) return;
+        const curIdx = cells.findIndex(c => c.id === state.quadFocus.activeCell?.id);
+        const nextIdx = (curIdx + 1) % cells.length;
+        switchQuadCell(cells[nextIdx]);
+      });
+    }
+
+    // Selector de paso del D-Pad (0.10m, 0.50m, 1.00m)
+    if (dom.quadStepChoices) {
+      dom.quadStepChoices.forEach(btn => {
+        btn.addEventListener('click', () => {
+          dom.quadStepChoices.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.quadFocus.stepSize = parseFloat(btn.dataset.step) || 0.50;
+        });
+      });
+    }
+
+    // D-Pad con avance continuo y toques individuales
+    attachDpadContinuousListener(dom.quadDpadUp, () => {
+      state.quadFocus.dY += state.quadFocus.stepSize;
+      updateQuadCalculations();
+      renderQuadCanvas();
+    });
+    attachDpadContinuousListener(dom.quadDpadDown, () => {
+      state.quadFocus.dY -= state.quadFocus.stepSize;
+      updateQuadCalculations();
+      renderQuadCanvas();
+    });
+    attachDpadContinuousListener(dom.quadDpadRight, () => {
+      state.quadFocus.dX += state.quadFocus.stepSize;
+      updateQuadCalculations();
+      renderQuadCanvas();
+    });
+    attachDpadContinuousListener(dom.quadDpadLeft, () => {
+      state.quadFocus.dX -= state.quadFocus.stepSize;
+      updateQuadCalculations();
+      renderQuadCanvas();
+    });
+    if (dom.quadDpadCenter) {
+      dom.quadDpadCenter.addEventListener('click', () => {
+        if (!state.quadFocus.activeCell) return;
+        const p00 = state.quadFocus.activeCell.p00, p10 = state.quadFocus.activeCell.p10, p01 = state.quadFocus.activeCell.p01;
+        const LX = Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0;
+        const LY = Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0;
+        state.quadFocus.dX = Math.round((LX / 2) * 20) / 20;
+        state.quadFocus.dY = Math.round((LY / 2) * 20) / 20;
+        updateQuadCalculations();
+        renderQuadCanvas();
+      });
+    }
+
+    // Entradas directas dX y dY
+    if (dom.quadInpDx) {
+      dom.quadInpDx.addEventListener('input', () => {
+        state.quadFocus.dX = parseFloat(dom.quadInpDx.value) || 0;
+        updateQuadCalculations();
+        renderQuadCanvas();
+      });
+    }
+    if (dom.quadInpDy) {
+      dom.quadInpDy.addEventListener('input', () => {
+        state.quadFocus.dY = parseFloat(dom.quadInpDy.value) || 0;
+        updateQuadCalculations();
+        renderQuadCanvas();
+      });
+    }
+    if (dom.quadActualReading) {
+      dom.quadActualReading.addEventListener('input', () => {
+        updateQuadCalculations();
+      });
+    }
+    if (dom.quadBtnSavePoint) {
+      dom.quadBtnSavePoint.addEventListener('click', saveQuadAuxPoint);
+    }
+
+    // Calibración Rápida de HI con Teodolito
+    if (dom.quadBtnOpenCalib) {
+      dom.quadBtnOpenCalib.addEventListener('click', () => {
+        if (dom.quadCalibDrawer) {
+          const isOpen = dom.quadCalibDrawer.style.display === 'flex' || dom.quadCalibDrawer.style.display === 'block';
+          dom.quadCalibDrawer.style.display = isOpen ? 'none' : 'block';
+        }
+      });
+    }
+    if (dom.quadBtnApplyCalib) {
+      dom.quadBtnApplyCalib.addEventListener('click', applyQuadCalibration);
+    }
+    if (dom.quadBtnCancelCalib) {
+      dom.quadBtnCancelCalib.addEventListener('click', () => {
+        if (dom.quadCalibDrawer) dom.quadCalibDrawer.style.display = 'none';
+      });
+    }
+
+    // Eventos táctiles sobre el Canvas del Cuadrante (#quad-canvas)
+    if (dom.quadCanvas) {
+      let isDraggingQuad = false;
+      dom.quadCanvas.addEventListener('pointerdown', (e) => {
+        isDraggingQuad = true;
+        handleQuadCanvasTouch(e.clientX, e.clientY);
+      });
+      dom.quadCanvas.addEventListener('pointermove', (e) => {
+        if (isDraggingQuad) {
+          handleQuadCanvasTouch(e.clientX, e.clientY);
+        }
+      });
+      window.addEventListener('pointerup', () => {
+        isDraggingQuad = false;
+      });
+      window.addEventListener('pointercancel', () => {
+        isDraggingQuad = false;
+      });
+    }
 
     // Sincronización con visualViewport para iPhone Notch / teclado virtual
     if (window.visualViewport) {
@@ -4632,31 +5652,31 @@
             }
           }
         } else {
-          // Si hace clic en un espacio vacío en modo normal, entrar en modo cadenero
+          // Si hace clic dentro de cualquier cuadro en modo normal, detectar la celda y abrir la Vista Enfocada de Cuadrante (4 Estacas)
           const pondPos = getPondCoords(pos.x, pos.y);
           if (pondPos.x >= 0 && pondPos.y >= 0) {
-            let closest = state.stakes[0];
-            let minDist = Infinity;
-            state.stakes.forEach(st => {
-              const d = Math.hypot(st.x - pondPos.x, st.y - pondPos.y);
-              if (d < minDist) {
-                minDist = d;
-                closest = st;
-              }
-            });
-            if (closest) {
-              openCadeneroMode(closest);
-              const { uRow, uCol } = getLocalRowColVectors(closest);
-              const deltaX = pondPos.x - closest.x;
-              const deltaY = pondPos.y - closest.y;
-              const det = (uRow.x * uCol.y) - (uRow.y * uCol.x);
+            const cell = findCellAtPondPos(pondPos.x, pondPos.y);
+            if (cell) {
+              openQuadFocusedView(cell);
+              const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
+              const vXx = p10.x - p00.x, vXy = p10.y - p00.y;
+              const LX = Math.hypot(vXx, vXy) || 15.0;
+              const uXx = vXx / LX, uXy = vXy / LX;
+
+              const vYx = p01.x - p00.x, vYy = p01.y - p00.y;
+              const LY = Math.hypot(vYx, vYy) || 15.0;
+              const uYx = vYx / LY, uYy = vYy / LY;
+
+              const deltaX = pondPos.x - p00.x;
+              const deltaY = pondPos.y - p00.y;
+              const det = (uXx * uYy) - (uXy * uYx);
               if (Math.abs(det) > 1e-5) {
-                const dx = (deltaX * uCol.y - deltaY * uCol.x) / det;
-                const dy = (uRow.x * deltaY - uRow.y * deltaX) / det;
-                if (dom.cadDxInput) dom.cadDxInput.value = (Math.round(dx * 10) / 10).toFixed(1);
-                if (dom.cadDyInput) dom.cadDyInput.value = (Math.round(dy * 10) / 10).toFixed(1);
-                updateCadeneroCalculations();
-                renderCanvas2D();
+                const dx = (deltaX * uYy - deltaY * uYx) / det;
+                const dy = (uXx * deltaY - uXy * deltaX) / det;
+                state.quadFocus.dX = Math.round(dx * 20) / 20;
+                state.quadFocus.dY = Math.round(dy * 20) / 20;
+                updateQuadCalculations();
+                renderQuadCanvas();
               }
             }
           }

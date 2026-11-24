@@ -186,6 +186,7 @@
           <!-- Controles Flotantes del Canvas 2D -->
           <div class="canvas-floating-controls">
             <button id="canvas-btn-fullscreen-toggle" class="canvas-ctrl-btn canvas-btn-fs" title="Pantalla Completa Real">⛶</button>
+            <button id="canvas-btn-open-quad" class="canvas-ctrl-btn" title="Enfocar Cuadrante (4 Estacas) en Pantalla Dividida" style="background: #f59e0b; color: #000; font-weight: 800;">🔲</button>
             <button id="canvas-btn-rot90" class="canvas-ctrl-btn" title="Rotar Vista 90° (Orientar según el nivel en campo)">🔄 90°</button>
             <button id="canvas-btn-mirror" class="canvas-ctrl-btn" title="Invertir Vista (Espejo)">🪞</button>
             <button id="canvas-btn-zoom-in" class="canvas-ctrl-btn" title="Acercar">+</button>
@@ -303,6 +304,9 @@
 
               <!-- Fila 5: Acciones (Guardar punto y Volver) -->
               <div class="cad-action-row">
+                <button type="button" id="cad-btn-open-quad" class="btn btn-warning btn-block cad-action-btn" style="background: #f59e0b; color: #000; font-weight: 800; border: none;">
+                  🔲 Enfocar Cuadro 4 Estacas (Pantalla Dividida)
+                </button>
                 <button type="button" id="cad-btn-save-point" class="btn btn-primary btn-block cad-action-btn">
                   💾 Guardar Punto Auxiliar
                 </button>
@@ -311,6 +315,218 @@
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- ============================================================
+             VISTA ENFOCADA DE CUADRANTE (4 ESTACAS) CON PANTALLA DIVIDIDA
+             Y CRUCETA DIRECCIONAL PARA TEODOLITO Y MIRA
+             ============================================================ -->
+        <div id="view-quad-focused" class="quad-focused-container" style="display: none;">
+          <!-- Barra Superior de Navegación de Cuadrantes -->
+          <header class="quad-header-bar">
+            <button type="button" id="quad-btn-back" class="btn btn-outline quad-nav-btn" title="Volver a la Malla Completa">
+              ← Volver al Lago
+            </button>
+            <div class="quad-selector-group">
+              <button type="button" id="quad-btn-prev-cell" class="quad-arrow-btn" title="Cuadro Anterior">◀</button>
+              <select id="quad-cell-select" class="quad-cell-select" title="Seleccionar Cuadrante">
+                <!-- Opciones como Cuadro: A1 - A2 - B1 - B2 -->
+              </select>
+              <button type="button" id="quad-btn-next-cell" class="quad-arrow-btn" title="Cuadro Siguiente">▶</button>
+            </div>
+            <button type="button" id="quad-btn-center-pointer" class="btn btn-outline quad-nav-btn" title="Centrar Puntero en el Cuadro">
+              🎯 Centrar
+            </button>
+          </header>
+
+          <!-- Contenedor Pantalla Dividida (Split-Screen: NUNCA encimando panel sobre dibujo) -->
+          <div class="quad-split-body">
+            <!-- ZONA 1: Lienzo Interactivo del Cuadro en Grande -->
+            <section class="quad-zone-canvas">
+              <div class="quad-canvas-overlay-tag">
+                <span id="quad-active-tag">CUADRANTE: A1 - A2 - B1 - B2</span>
+                <span class="quad-subgrid-badge">📏 Cuadrícula 1.0 m</span>
+              </div>
+              <canvas id="quad-canvas" width="600" height="450"></canvas>
+              <div class="quad-canvas-footer-hint">
+                👉 Toca o arrastra sobre el cuadro para mover la mira libremente
+              </div>
+            </section>
+
+            <!-- ZONA 2: Panel Fijo con D-Pad y Visor de Teodolito -->
+            <section class="quad-zone-controls">
+              <!-- Visor de Teodolito / Nivel (Hilo Medio a Rasante) -->
+              <div class="quad-theodolite-card">
+                <div class="quad-theodolite-header">
+                  <span class="quad-theodolite-badge">🔭 TEODOLITO / NIVEL EN CAMPO</span>
+                  <span id="quad-hi-display" class="quad-hi-badge">HI = 409.750 m</span>
+                </div>
+
+                <div class="quad-reading-split">
+                  <!-- Regla Estadimétrica Gráfica Vertical -->
+                  <div class="quad-rod-visual" title="Simulación visual de la mira en el retículo">
+                    <div class="rod-body">
+                      <div class="rod-grad red"></div>
+                      <div class="rod-grad black"></div>
+                      <div class="rod-grad red"></div>
+                      <div class="rod-grad black"></div>
+                      <div class="rod-grad red"></div>
+                      <div class="rod-grad black"></div>
+                      <!-- Hilo central horizontal del teodolito -->
+                      <div class="rod-crosshair" id="rod-crosshair-line">
+                        <span class="rod-crosshair-tag" id="rod-crosshair-tag">1.675 m</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Lectura Gigante a Rasante -->
+                  <div class="quad-reading-content">
+                    <div class="quad-reading-title">LECTURA EN HILO MEDIO (A RASANTE)</div>
+                    <div id="quad-ideal-reading" class="quad-ideal-val">1.675 m</div>
+                    <div class="quad-target-elev-row">
+                      <span>Cota Rasante Punto:</span>
+                      <strong id="quad-design-elev" class="mono-num">408.075 m</strong>
+                    </div>
+                    <div class="quad-offsets-row">
+                      <span>Desfase Base:</span>
+                      <strong id="quad-offsets-summary" class="mono-num">dX=0.00m, dY=0.00m</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Alerta de HI Descalibrado (ej. -304.349m) -->
+                <div id="quad-hi-alert" class="quad-hi-alert" style="display: none;">
+                  <div class="quad-hi-alert-icon">⚠️</div>
+                  <div class="quad-hi-alert-body">
+                    <strong>HI Incompatible / Descalibrado:</strong>
+                    <div id="quad-hi-alert-text">El HI actual da lectura fuera de rango.</div>
+                  </div>
+                  <button type="button" id="quad-btn-open-calib" class="btn btn-warning btn-sm quad-calib-btn">
+                    ⚙️ Calibrar HI en Estaca
+                  </button>
+                </div>
+
+                <!-- Cajón de Calibración Rápida de HI con Teodolito -->
+                <div id="quad-calib-drawer" class="quad-calib-drawer" style="display: none;">
+                  <div class="quad-calib-title">📐 Calibrar Teodolito / Altura Instrumental (HI)</div>
+                  <div class="quad-calib-inputs">
+                    <div class="quad-calib-field">
+                      <label for="quad-calib-stake-sel">Estaca Conocida / BM:</label>
+                      <select id="quad-calib-stake-sel" class="form-select form-select-sm"></select>
+                    </div>
+                    <div class="quad-calib-field">
+                      <label for="quad-calib-reading-input">Lectura V+ en Mira (m):</label>
+                      <input type="number" id="quad-calib-reading-input" class="form-control form-control-sm" step="0.001" placeholder="Ej. 1.750">
+                    </div>
+                    <div class="quad-calib-field">
+                      <label for="quad-calib-angle-input">Ángulo Vert. Teodolito:</label>
+                      <input type="text" id="quad-calib-angle-input" class="form-control form-control-sm" value="90°00'00&quot; (Horizontal)" readonly>
+                    </div>
+                  </div>
+                  <div class="quad-calib-actions">
+                    <button type="button" id="quad-btn-apply-calib" class="btn btn-primary btn-sm">
+                      ✓ Aplicar Nuevo HI
+                    </button>
+                    <button type="button" id="quad-btn-cancel-calib" class="btn btn-outline btn-sm">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cruceta Direccional D-Pad y Ajuste de Paso -->
+              <div class="quad-dpad-card">
+                <div class="quad-dpad-header">
+                  <span class="quad-dpad-title">🎮 CRUCETA DE POSICIONAMIENTO</span>
+                  <!-- Selector de Paso -->
+                  <div class="quad-step-selector">
+                    <span class="quad-step-label">Paso:</span>
+                    <button type="button" class="quad-step-choice" data-step="0.10">0.10m</button>
+                    <button type="button" class="quad-step-choice active" data-step="0.50">0.50m</button>
+                    <button type="button" class="quad-step-choice" data-step="1.00">1.00m</button>
+                  </div>
+                </div>
+
+                <div class="quad-dpad-layout">
+                  <!-- D-PAD INTERACTIVO (Soporta toque único y mantener presionado) -->
+                  <div class="quad-dpad-cross">
+                    <button type="button" id="quad-dpad-up" class="dpad-btn up" title="Mover Arriba (+dY)">
+                      <span class="dpad-arrow">▲</span>
+                      <span class="dpad-sub">Arriba</span>
+                    </button>
+                    <div class="dpad-middle-row">
+                      <button type="button" id="quad-dpad-left" class="dpad-btn left" title="Mover Izquierda (-dX)">
+                        <span class="dpad-arrow">◄</span>
+                        <span class="dpad-sub">Izq</span>
+                      </button>
+                      <button type="button" id="quad-dpad-center" class="dpad-btn center" title="Centro del Cuadro">
+                        🎯
+                      </button>
+                      <button type="button" id="quad-dpad-right" class="dpad-btn right" title="Mover Derecha (+dX)">
+                        <span class="dpad-arrow">►</span>
+                        <span class="dpad-sub">Der</span>
+                      </button>
+                    </div>
+                    <button type="button" id="quad-dpad-down" class="dpad-btn down" title="Mover Abajo (-dY)">
+                      <span class="dpad-arrow">▼</span>
+                      <span class="dpad-sub">Abajo</span>
+                    </button>
+                  </div>
+
+                  <!-- Campos Numéricos Directos de dX y dY y distancias a esquinas -->
+                  <div class="quad-direct-inputs">
+                    <div class="quad-coord-box">
+                      <label for="quad-inp-dx">dX (sobre base):</label>
+                      <div class="input-with-unit">
+                        <input type="number" id="quad-inp-dx" class="form-control form-control-sm" step="0.05" value="0.00">
+                        <span class="unit-tag">m</span>
+                      </div>
+                    </div>
+                    <div class="quad-coord-box">
+                      <label for="quad-inp-dy">dY (sobre altura):</label>
+                      <div class="input-with-unit">
+                        <input type="number" id="quad-inp-dy" class="form-control form-control-sm" step="0.05" value="0.00">
+                        <span class="unit-tag">m</span>
+                      </div>
+                    </div>
+                    <div class="quad-corner-dists">
+                      <div id="quad-dist-corner-1" class="corner-dist">dA1: 0.00m</div>
+                      <div id="quad-dist-corner-2" class="corner-dist">dA2: 15.00m</div>
+                      <div id="quad-dist-corner-3" class="corner-dist">dB1: 15.00m</div>
+                      <div id="quad-dist-corner-4" class="corner-dist">dB2: 21.21m</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fila de Lectura Real de Campo y Corte / Relleno -->
+              <div class="quad-eval-card">
+                <div class="quad-eval-grid">
+                  <div class="quad-eval-input-group">
+                    <label for="quad-actual-reading">Lectura Real vista en Teodolito:</label>
+                    <div class="input-with-unit">
+                      <input type="number" id="quad-actual-reading" class="form-control" step="0.001" placeholder="Ej. 1.690">
+                      <span class="unit-tag">m</span>
+                    </div>
+                  </div>
+                  <div class="quad-eval-status-group">
+                    <label>Instrucción al Cadenero:</label>
+                    <div id="quad-status-badge" class="cad-status-badge pendiente">
+                      SIN MEDIR
+                    </div>
+                  </div>
+                </div>
+                <div class="quad-action-buttons">
+                  <button type="button" id="quad-btn-save-point" class="btn btn-primary quad-save-btn">
+                    💾 Guardar Punto Medido en Cuadro
+                  </button>
+                  <button type="button" id="quad-btn-exit-bottom" class="btn btn-outline quad-exit-btn">
+                    ← Volver a Malla Completa
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
 

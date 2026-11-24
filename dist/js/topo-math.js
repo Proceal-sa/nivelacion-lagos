@@ -40,13 +40,33 @@ const TopoMath = {
 
   // Calculate Design Elevation for a stake
   calculateDesignElevation(row, col, settings) {
-    const dx = settings.dx || 10;
-    const dy = settings.dy || 10;
+    const slopeMode = settings.slopeMode || 'mesh_axes';
+    const baseElevation = Number(settings.boxElevation !== undefined ? settings.boxElevation : 100.0);
     const boxRow = settings.boxRow ?? 0;
     const boxCol = settings.boxCol ?? 0;
-    const baseElevation = settings.boxElevation ?? 100.0;
-    const slopeMode = settings.slopeMode || 'orthogonal';
 
+    if (slopeMode === 'mesh_axes') {
+      const slopePct = Number(settings.slopePct !== undefined ? settings.slopePct : (settings.slope !== undefined ? settings.slope : 0.50));
+      const slopeDir = settings.slopeDirection === 'bajar' ? -1 : 1;
+      const isLettersOnBase = (settings.seedNamingMode || settings.seedFrame?.namingMode || 'letters_on_base') === 'letters_on_base';
+      const dCol = Number(settings.seedFrame?.dCol || settings.seedDCol || settings.dx || 15.0);
+      const dFila = Number(settings.seedFrame?.dFila || settings.seedDFila || settings.dy || 15.0);
+
+      let du, dv;
+      if (isLettersOnBase) {
+        du = Math.abs(row - boxRow) * dCol;
+        dv = Math.abs(col - boxCol) * dFila;
+      } else {
+        du = Math.abs(col - boxCol) * dCol;
+        dv = Math.abs(row - boxRow) * dFila;
+      }
+      const distMalla = du + dv;
+      const elev = baseElevation + slopeDir * (distMalla * (slopePct / 100));
+      return Math.round(elev * 1000) / 1000;
+    }
+
+    const dx = settings.dx || 10;
+    const dy = settings.dy || 10;
     const p = this.getCoordinates(row, col, dx, dy);
     const boxP = this.getCoordinates(boxRow, boxCol, dx, dy);
 
@@ -278,8 +298,9 @@ const TopoMath = {
     const cols = settings.cols || 8;
     const boxRow = settings.boxRow ?? 0;
     const boxCol = settings.boxCol ?? 0;
-    const baseElevation = settings.boxElevation ?? 100.0;
-    const slopeMode = settings.slopeMode || 'orthogonal';
+    const baseElevation = Number(settings.boxElevation !== undefined ? settings.boxElevation : 100.0);
+    const slopeMode = settings.slopeMode || 'mesh_axes';
+    const isLettersOnBase = (settings.seedNamingMode || settings.seedFrame?.namingMode || 'letters_on_base') === 'letters_on_base';
 
     // Determinar coordenadas reales de la caja de pesca
     let boxX, boxY;
@@ -290,6 +311,15 @@ const TopoMath = {
       const boxStake = stakes.find(s => s.row === boxRow && s.col === boxCol) || stakes[0];
       boxX = boxStake.x;
       boxY = boxStake.y;
+    } else if (settings.seedFrame && settings.seedFrame.success) {
+      const sf = settings.seedFrame;
+      if (isLettersOnBase) {
+        boxX = sf.xA1 + boxRow * sf.Ux + boxCol * sf.Vx;
+        boxY = sf.yA1 + boxRow * sf.Uy + boxCol * sf.Vy;
+      } else {
+        boxX = sf.xA1 + boxCol * sf.Ux + boxRow * sf.Vx;
+        boxY = sf.yA1 + boxCol * sf.Uy + boxRow * sf.Vy;
+      }
     } else {
       const boxPos = this.getCoordinates(boxRow, boxCol, dx, dy);
       boxX = boxPos.x;
@@ -316,6 +346,51 @@ const TopoMath = {
     }
 
     // Pure mathematical formula based on drainage slope mode
+    if (slopeMode === 'mesh_axes') {
+      const slopePct = Number(settings.slopePct !== undefined ? settings.slopePct : (settings.slope !== undefined ? settings.slope : 0.50));
+      const slopeDir = settings.slopeDirection === 'bajar' ? -1 : 1;
+
+      // Vectores unitarios e_U y e_V
+      let eUx = 1, eUy = 0, eVx = 0, eVy = 1;
+      const sf = settings.seedFrame;
+      if (sf && sf.success) {
+        const lenU = Math.hypot(sf.Ux, sf.Uy) || 15.0;
+        const lenV = Math.hypot(sf.Vx, sf.Vy) || 15.0;
+        eUx = sf.Ux / lenU;
+        eUy = sf.Uy / lenU;
+        eVx = sf.Vx / lenV;
+        eVy = sf.Vy / lenV;
+      }
+
+      // Sistema lineal 2x2 contravariante exacto:
+      // dxRel = du * eUx + dv * eVx
+      // dyRel = du * eUy + dv * eVy
+      const det = (eUx * eVy) - (eUy * eVx);
+      const dxRel = x - boxX;
+      const dyRel = y - boxY;
+
+      let du = 0, dv = 0;
+      if (Math.abs(det) > 1e-6) {
+        du = (dxRel * eVy - dyRel * eVx) / det;
+        dv = (eUx * dyRel - eUy * dxRel) / det;
+      } else {
+        du = dxRel;
+        dv = dyRel;
+      }
+
+      const distMalla = Math.abs(du) + Math.abs(dv);
+      const elev = baseElevation + slopeDir * (distMalla * (slopePct / 100));
+
+      return {
+        elevation: Math.round(elev * 1000) / 1000,
+        method: 'Pendiente Acumulativa por Ejes de Malla (|Δu| + |Δv|)',
+        distMalla: Math.round(distMalla * 1000) / 1000,
+        du: Math.round(du * 1000) / 1000,
+        dv: Math.round(dv * 1000) / 1000,
+        isBilinear: false
+      };
+    }
+
     const deltaX = Math.abs(x - boxX);
     const deltaY = Math.abs(y - boxY);
 
@@ -705,11 +780,26 @@ const TopoMath = {
     const Vx = dFila * Math.cos(thetaV);
     const Vy = dFila * Math.sin(thetaV);
 
-    // Cuatro esquinas del cuadro semilla
+    const namingMode = params.namingMode || params.seedNamingMode || 'letters_on_base';
+    const isLettersOnBase = namingMode === 'letters_on_base';
+
+    // Cuatro esquinas del cuadro semilla:
+    // Vector U está sobre el Talud Base (horizontal +X)
+    // Vector V está sobre el Talud Lateral (vertical +Y)
+    const cornerU = { x: xA1 + Ux, y: yA1 + Uy };
+    const cornerV = { x: xA1 + Vx, y: yA1 + Vy };
+    const cornerUV = { x: xA1 + Ux + Vx, y: yA1 + Uy + Vy };
+
+    // En 'letters_on_base' (PREDETERMINADO):
+    // Sobre el Talud Base (U) avanzan las LETRAS -> esquina B1 = A1 + U
+    // Subiendo por el Talud Lateral (V) suben los NÚMEROS -> esquina A2 = A1 + V
+    // En 'numbers_on_base':
+    // Sobre el Talud Base (U) avanzan los NÚMEROS -> esquina A2 = A1 + U
+    // Subiendo por el Talud Lateral (V) suben las LETRAS -> esquina B1 = A1 + V
     const A1 = { x: xA1, y: yA1 };
-    const A2 = { x: xA1 + Ux, y: yA1 + Uy };
-    const B1 = { x: xA1 + Vx, y: yA1 + Vy };
-    const B2 = { x: xA1 + Ux + Vx, y: yA1 + Uy + Vy };
+    const B1 = isLettersOnBase ? cornerU : cornerV;
+    const A2 = isLettersOnBase ? cornerV : cornerU;
+    const B2 = cornerUV;
 
     const thetaUDeg = thetaU * 180 / Math.PI;
     const thetaVDeg = thetaV * 180 / Math.PI;
@@ -717,6 +807,8 @@ const TopoMath = {
     return {
       success: true,
       refMode,
+      namingMode,
+      isLettersOnBase,
       reparto: clamp(Number(reparto), 0, 1),
       dCol,
       dFila,
@@ -725,6 +817,8 @@ const TopoMath = {
       xA1,
       yA1,
       xB1: Math.round(B1.x * 1000) / 1000,
+      yB1: Math.round(B1.y * 1000) / 1000,
+      xA2: Math.round(A2.x * 1000) / 1000,
       yA2: Math.round(A2.y * 1000) / 1000,
       alpha,
       alphaDeg: Math.round(alphaDeg * 100) / 100,
@@ -757,11 +851,13 @@ const TopoMath = {
 
   /**
    * Genera las estacas del lago usando los vectores inclinados U y V del Cuadro Semilla.
-   * Posición: X = xA1 + (c + offset) * Ux + r * Vx
-   *           Y = yA1 + (c + offset) * Uy + r * Vy
+   * En modo letters_on_base:
+   *   r avanza en U (Talud Base, horizontal +X): Letras A -> B -> C -> ...
+   *   c avanza en V (Talud Lateral, vertical +Y): Números 1 -> 2 -> 3 -> ...
    */
   generateSeedFrameMesh(projId, seedFrame, settings) {
     const { Ux, Uy, Vx, Vy, xA1, yA1 } = seedFrame;
+    const isLettersOnBase = (seedFrame.namingMode || settings.seedNamingMode || 'letters_on_base') === 'letters_on_base';
 
     // Si está en modo seed, usar seedRowPattern si existe; si no, usar seedRows (7) y seedCols (10)
     const patternStr = (settings.meshMode === 'seed' ? settings.seedRowPattern : settings.rowPattern) || '';
@@ -769,50 +865,96 @@ const TopoMath = {
       ? patternStr.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
       : [];
 
-    const numRows = rowCounts.length > 0 ? rowCounts.length : Number(settings.seedRows || settings.rows || 7);
-    const maxCols = rowCounts.length > 0 ? Math.max(...rowCounts) : Number(settings.seedCols || settings.cols || 10);
-    const alignment = settings.seedAlignment || settings.rowAlignment || 'center'; // 'center', 'left', 'right'
+    const numLetters = rowCounts.length > 0 ? rowCounts.length : Number(settings.seedRows || settings.rows || 7);
+    const maxNumbers = rowCounts.length > 0 ? Math.max(...rowCounts) : Number(settings.seedCols || settings.cols || 10);
+    const alignment = settings.seedAlignment || settings.rowAlignment || (isLettersOnBase ? 'base' : 'center');
 
     const stakes = [];
 
-    for (let r = 0; r < numRows; r++) {
-      const countInRow = rowCounts.length > 0 ? rowCounts[r] : maxCols;
+    if (isLettersOnBase) {
+      // Letras avanzan sobre Talud Base (vector U, dirección horizontal +X)
+      // Números suben sobre Talud Lateral (vector V, dirección vertical +Y)
+      for (let r = 0; r < numLetters; r++) {
+        const countInLetter = rowCounts.length > 0 ? rowCounts[r] : maxNumbers;
 
-      for (let c = 0; c < countInRow; c++) {
-        let offsetFila = 0;
-        if (alignment === 'center') {
-          offsetFila = (maxCols - countInRow) / 2;
-        } else if (alignment === 'right') {
-          offsetFila = maxCols - countInRow;
+        for (let c = 0; c < countInLetter; c++) {
+          let offsetNum = 0;
+          if (alignment === 'center') {
+            offsetNum = (maxNumbers - countInLetter) / 2;
+          } else if (alignment === 'right') {
+            offsetNum = maxNumbers - countInLetter;
+          }
+
+          const effC = c + offsetNum;
+          const x = xA1 + r * Ux + effC * Vx;
+          const y = yA1 + r * Uy + effC * Vy;
+
+          const code = this.getStakeCode(r, c);
+          const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+
+          stakes.push({
+            id: `${projId}_${r}_${c}`,
+            projId: projId,
+            row: r,
+            col: c,
+            code: code,
+            x: Math.round(x * 1000) / 1000,
+            y: Math.round(y * 1000) / 1000,
+            designElevation: designElev.elevation,
+            isCustomDesign: false,
+            reading: null,
+            measuredElevation: null,
+            stationId: null,
+            measuredAt: null,
+            cutFill: null,
+            status: 'PENDIENTE',
+            hasPuddleWarning: false,
+            puddleReason: null,
+            note: ''
+          });
         }
+      }
+    } else {
+      // Modo números en base (A1..A10 en Base U, A1..G1 en Lateral V)
+      for (let r = 0; r < numLetters; r++) {
+        const countInRow = rowCounts.length > 0 ? rowCounts[r] : maxNumbers;
 
-        const effC = c + offsetFila;
-        const x = xA1 + effC * Ux + r * Vx;
-        const y = yA1 + effC * Uy + r * Vy;
+        for (let c = 0; c < countInRow; c++) {
+          let offsetFila = 0;
+          if (alignment === 'center') {
+            offsetFila = (maxNumbers - countInRow) / 2;
+          } else if (alignment === 'right') {
+            offsetFila = maxNumbers - countInRow;
+          }
 
-        const code = this.getStakeCode(r, c);
-        const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+          const effC = c + offsetFila;
+          const x = xA1 + effC * Ux + r * Vx;
+          const y = yA1 + effC * Uy + r * Vy;
 
-        stakes.push({
-          id: `${projId}_${r}_${c}`,
-          projId: projId,
-          row: r,
-          col: c,
-          code: code,
-          x: Math.round(x * 1000) / 1000,
-          y: Math.round(y * 1000) / 1000,
-          designElevation: designElev.elevation,
-          isCustomDesign: false,
-          reading: null,
-          measuredElevation: null,
-          stationId: null,
-          measuredAt: null,
-          cutFill: null,
-          status: 'PENDIENTE',
-          hasPuddleWarning: false,
-          puddleReason: null,
-          note: ''
-        });
+          const code = this.getStakeCode(r, c);
+          const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+
+          stakes.push({
+            id: `${projId}_${r}_${c}`,
+            projId: projId,
+            row: r,
+            col: c,
+            code: code,
+            x: Math.round(x * 1000) / 1000,
+            y: Math.round(y * 1000) / 1000,
+            designElevation: designElev.elevation,
+            isCustomDesign: false,
+            reading: null,
+            measuredElevation: null,
+            stationId: null,
+            measuredAt: null,
+            cutFill: null,
+            status: 'PENDIENTE',
+            hasPuddleWarning: false,
+            puddleReason: null,
+            note: ''
+          });
+        }
       }
     }
 

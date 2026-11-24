@@ -107,6 +107,11 @@
     dom.seedD2 = document.getElementById('seed-d2');
     dom.seedXA1 = document.getElementById('seed-xa1');
     dom.seedYA1 = document.getElementById('seed-ya1');
+    dom.seedToggleTransposeBtn = document.getElementById('seed-toggle-transpose-btn');
+    dom.lblSeedDCol = document.getElementById('lbl-seed-dcol');
+    dom.lblSeedDFila = document.getElementById('lbl-seed-dfila');
+    dom.helpSeedDCol = document.getElementById('help-seed-dcol');
+    dom.helpSeedDFila = document.getElementById('help-seed-dfila');
     dom.seedRefDualBtn = document.getElementById('seed-ref-dual-btn');
     dom.seedRefTaludBtn = document.getElementById('seed-ref-talud-btn');
     dom.seedRefOrtogonalBtn = document.getElementById('seed-ref-ortogonal-btn');
@@ -179,6 +184,10 @@
     dom.cfgBoxCol = document.getElementById('cfg-box-col');
     dom.cfgBoxElev = document.getElementById('cfg-box-elev');
     dom.cfgSlopeMode = document.getElementById('cfg-slope-mode');
+    dom.cfgMeshAxesFields = document.getElementById('cfg-mesh-axes-fields');
+    dom.cfgSlopeDirSubir = document.getElementById('cfg-slope-dir-subir');
+    dom.cfgSlopeDirBajar = document.getElementById('cfg-slope-dir-bajar');
+    dom.cfgSlopePct = document.getElementById('cfg-slope-pct');
     dom.cfgSlopeX = document.getElementById('cfg-slope-x');
     dom.cfgSlopeY = document.getElementById('cfg-slope-y');
     dom.cfgSlopeRadial = document.getElementById('cfg-slope-radial');
@@ -417,7 +426,8 @@
         seedRows: 7,
         seedCols: 10,
         seedRowPattern: '',
-        seedAlignment: 'center',
+        seedAlignment: 'base',
+        seedNamingMode: 'letters_on_base',
         tapeL12: 60.0,
         tapeL23: 45.0,
         tapeL34: 58.0,
@@ -425,7 +435,7 @@
         tapeD13: 74.5,
         tapeD24: 73.8,
         rowPattern: '5, 7, 7, 7, 5',
-        rowAlignment: 'center',
+        rowAlignment: 'base',
         rows: 7,           // Filas A..G (7 filas)
         cols: 10,          // Columnas 1..10 (70 estacas)
         dx: 15.0,          // 15 metros entre columnas
@@ -433,7 +443,9 @@
         boxRow: 0,         // Fila A
         boxCol: 0,         // Columna 1 (A1)
         boxElevation: 100.000, // Cota de Diseño más baja en la caja
-        slopeMode: 'orthogonal', // Doble pendiente ortogonal
+        slopeMode: 'mesh_axes', // Pendiente Acumulativa por Ejes de Malla
+        slopePct: 0.50,      // 0.5% por defecto
+        slopeDirection: 'subir', // Subir desde punto más bajo / Desagüe
         slopeX: 0.50,      // 0.5% longitudinal hacia la caja
         slopeY: 0.80,      // 0.8% transversal hacia el eje de cosecha
         slopeRadial: 0.60, // 0.6% radial
@@ -447,11 +459,11 @@
       dFila: 15.0,
       d1: 23.85,
       d2: 18.20,
-      xA1: 1.0,
-      yA1: 2.0,
-      refMode: 'y_axis_xB1',
-      xB1: 1.5,
-      yA2: 5.48
+      xA1: 1.5,
+      yA1: 1.5,
+      refMode: 'dual_inclinado',
+      reparto: 0.5,
+      namingMode: 'letters_on_base'
     });
     if (seedRes.success) {
       defaultProject.settings.seedFrame = seedRes;
@@ -668,7 +680,7 @@
         html += `
           <td class="${cellClass}" data-row="${stake.row}" data-col="${stake.col}" data-id="${stake.id}">
             <div class="stake-code">${stake.code}</div>
-            <div class="stake-design-val">${stake.designElevation.toFixed(2)}</div>
+            <div class="stake-design-val">${stake.designElevation.toFixed(3)}</div>
             ${diffHtml}
           </td>
         `;
@@ -1408,7 +1420,7 @@
 
       // Cota Rasante o Desbalance debajo de la estaca (ocultos hasta hacer zoom >= 1.6 o hover)
       if (showSecondary || isHovered) {
-        let subLabel = `${stake.designElevation.toFixed(2)}`;
+        let subLabel = `${stake.designElevation.toFixed(3)}`;
         if (stake.cutFill !== null && stake.cutFill !== undefined) {
           subLabel = `${stake.cutFill > 0 ? '+' : ''}${stake.cutFill.toFixed(2)}m`;
         }
@@ -1622,13 +1634,18 @@
     dom.cfgDx.value = s.dx;
     dom.cfgDy.value = s.dy;
     dom.cfgBoxElev.value = s.boxElevation.toFixed(3);
-    dom.cfgSlopeMode.value = s.slopeMode || 'orthogonal';
+    dom.cfgSlopeMode.value = s.slopeMode || 'mesh_axes';
+    if (dom.cfgSlopePct) dom.cfgSlopePct.value = (s.slopePct !== undefined ? s.slopePct : 0.50).toFixed(2);
+    setSlopeDirection(s.slopeDirection || 'subir');
+    setQuickSlope(s.slopePct !== undefined ? s.slopePct : 0.50);
     dom.cfgSlopeX.value = s.slopeX ?? 0.50;
     dom.cfgSlopeY.value = s.slopeY ?? 0.80;
     dom.cfgSlopeRadial.value = s.slopeRadial ?? 0.60;
     dom.cfgTolerance.value = s.toleranceCm ?? 2.0;
 
     // Valores para Modo Cuadro Semilla Vectorial
+    state.seedNamingMode = s.seedNamingMode || 'letters_on_base';
+    updateTransposeLabels();
     if (dom.seedDCol) dom.seedDCol.value = s.seedDCol ?? 15.0;
     if (dom.seedDFila) dom.seedDFila.value = s.seedDFila ?? 15.0;
     if (dom.seedD1) dom.seedD1.value = s.seedD1 ?? 23.85;
@@ -1643,7 +1660,7 @@
     if (dom.seedRowPattern) dom.seedRowPattern.value = s.seedRowPattern || '';
 
     selectSeedRefMode(s.seedRefMode || 'dual_inclinado');
-    selectSeedAlignment(s.seedAlignment || 'center');
+    selectSeedAlignment(s.seedAlignment || 'base');
     updateSeedFramePreview();
 
     // Valores para modo cinta
@@ -1924,14 +1941,53 @@
     dom.cfgBoxCol.innerHTML = colOpts;
   }
 
-  function updateSlopeModeFields(mode) {
-    if (mode === 'orthogonal') {
-      dom.cfgOrthogonalFields.style.display = 'block';
-      dom.cfgRadialFields.style.display = 'none';
-    } else {
-      dom.cfgOrthogonalFields.style.display = 'none';
-      dom.cfgRadialFields.style.display = 'block';
+  function updateTransposeLabels() {
+    const isLetters = (state.seedNamingMode || 'letters_on_base') === 'letters_on_base';
+    if (dom.seedToggleTransposeBtn) {
+      dom.seedToggleTransposeBtn.textContent = isLetters 
+        ? '🔄 Ejes: Letras en Base (A1➔B1)' 
+        : '🔄 Ejes: Números en Base (A1➔A2)';
     }
+    if (dom.lblSeedDCol) {
+      dom.lblSeedDCol.textContent = isLetters 
+        ? 'Talud Base d_base (A1 ➔ B1 Letras):' 
+        : 'Talud Base d_base (A1 ➔ A2 Números):';
+    }
+    if (dom.lblSeedDFila) {
+      dom.lblSeedDFila.textContent = isLetters 
+        ? 'Talud Lateral d_lat (A1 ➔ A2 Números):' 
+        : 'Talud Lateral d_lat (A1 ➔ B1 Letras):';
+    }
+    if (dom.helpSeedDCol) {
+      dom.helpSeedDCol.textContent = isLetters
+        ? 'Distancia entre letras sobre el talud inferior (Eje X)'
+        : 'Distancia entre números sobre el talud inferior (Eje X)';
+    }
+    if (dom.helpSeedDFila) {
+      dom.helpSeedDFila.textContent = isLetters
+        ? 'Distancia entre números subiendo por talud izquierdo (Eje Y)'
+        : 'Distancia entre letras subiendo por talud izquierdo (Eje Y)';
+    }
+  }
+
+  function setSlopeDirection(dir) {
+    state.slopeDirection = dir;
+    if (dom.cfgSlopeDirSubir) dom.cfgSlopeDirSubir.classList.toggle('active', dir === 'subir');
+    if (dom.cfgSlopeDirBajar) dom.cfgSlopeDirBajar.classList.toggle('active', dir === 'bajar');
+  }
+
+  function setQuickSlope(pct) {
+    if (dom.cfgSlopePct) dom.cfgSlopePct.value = Number(pct).toFixed(2);
+    document.querySelectorAll('.btn-quick-slope').forEach(b => {
+      b.classList.toggle('active', Math.abs(parseFloat(b.dataset.pct) - parseFloat(pct)) < 0.01);
+    });
+  }
+
+  function updateSlopeModeFields(mode) {
+    const m = mode || 'mesh_axes';
+    if (dom.cfgMeshAxesFields) dom.cfgMeshAxesFields.style.display = (m === 'mesh_axes') ? 'block' : 'none';
+    if (dom.cfgOrthogonalFields) dom.cfgOrthogonalFields.style.display = (m === 'orthogonal') ? 'block' : 'none';
+    if (dom.cfgRadialFields) dom.cfgRadialFields.style.display = (m === 'radial') ? 'block' : 'none';
   }
 
   async function savePondConfig() {
@@ -1940,7 +1996,9 @@
     state.project.name = newName;
 
     const newBoxElev = parseFloat(dom.cfgBoxElev.value);
-    const newSlopeMode = dom.cfgSlopeMode.value;
+    const newSlopeMode = dom.cfgSlopeMode.value || 'mesh_axes';
+    const newSlopePct = dom.cfgSlopePct ? parseFloat(dom.cfgSlopePct.value) : 0.50;
+    const newSlopeDir = state.slopeDirection || 'subir';
     const newSlopeX = parseFloat(dom.cfgSlopeX.value);
     const newSlopeY = parseFloat(dom.cfgSlopeY.value);
     const newSlopeRadial = parseFloat(dom.cfgSlopeRadial.value);
@@ -1948,10 +2006,13 @@
 
     s.boxElevation = newBoxElev;
     s.slopeMode = newSlopeMode;
+    s.slopePct = isNaN(newSlopePct) ? 0.50 : newSlopePct;
+    s.slopeDirection = newSlopeDir;
     s.slopeX = newSlopeX;
     s.slopeY = newSlopeY;
     s.slopeRadial = newSlopeRadial;
     s.toleranceCm = newTolerance;
+    s.seedNamingMode = state.seedNamingMode || 'letters_on_base';
 
     let rawStakes;
 
@@ -1968,13 +2029,14 @@
       const rows = parseInt(dom.seedRows.value, 10) || 7;
       const cols = parseInt(dom.seedCols.value, 10) || 10;
       const rowPattern = dom.seedRowPattern.value.trim();
-      const alignment = state.seedAlignment || 'center';
+      const alignment = state.seedAlignment || 'base';
 
       const seedRes = window.TopoMath.solveSeedFrameVectorial({
         dCol, dFila, d1, d2, xA1, yA1,
         refMode: state.seedRefMode || 'dual_inclinado',
         reparto,
-        xB1, yA2
+        xB1, yA2,
+        namingMode: state.seedNamingMode || 'letters_on_base'
       });
 
       if (!seedRes.success) {
@@ -1997,6 +2059,7 @@
       s.seedCols = cols;
       s.seedRowPattern = rowPattern;
       s.seedAlignment = alignment;
+      s.seedNamingMode = state.seedNamingMode || 'letters_on_base';
       s.seedFrame = seedRes;
       s.dx = dCol;
       s.dy = dFila;
@@ -3280,6 +3343,25 @@
     dom.cfgSlopeMode.addEventListener('change', () => {
       updateSlopeModeFields(dom.cfgSlopeMode.value);
     });
+    if (dom.cfgSlopeDirSubir) {
+      dom.cfgSlopeDirSubir.addEventListener('click', () => setSlopeDirection('subir'));
+    }
+    if (dom.cfgSlopeDirBajar) {
+      dom.cfgSlopeDirBajar.addEventListener('click', () => setSlopeDirection('bajar'));
+    }
+    document.querySelectorAll('.btn-quick-slope').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const pct = e.currentTarget.dataset.pct;
+        setQuickSlope(pct);
+      });
+    });
+    if (dom.seedToggleTransposeBtn) {
+      dom.seedToggleTransposeBtn.addEventListener('click', () => {
+        state.seedNamingMode = (state.seedNamingMode === 'numbers_on_base') ? 'letters_on_base' : 'numbers_on_base';
+        updateTransposeLabels();
+        updateSeedFramePreview();
+      });
+    }
     dom.btnSaveConfig.addEventListener('click', savePondConfig);
 
     // Controles de Vista de Plano 2D (Rotación 90° y Espejo)
@@ -3472,7 +3554,7 @@
     let opts = '';
     state.stakes.forEach(s => {
       const isSel = (selectedStakeId && s.id === selectedStakeId) ? 'selected' : '';
-      opts += `<option value="${s.id}" ${isSel}>${s.code} (X=${s.x.toFixed(1)}m, Y=${s.y.toFixed(1)}m - Rasante=${s.designElevation.toFixed(2)}m)</option>`;
+      opts += `<option value="${s.id}" ${isSel}>${s.code} (X=${s.x.toFixed(1)}m, Y=${s.y.toFixed(1)}m - Rasante=${s.designElevation.toFixed(3)}m)</option>`;
     });
     dom.offBaseStake.innerHTML = opts;
   }

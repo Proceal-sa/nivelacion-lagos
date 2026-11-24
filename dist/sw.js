@@ -3,7 +3,7 @@
  * Totalmente compatible con subcarpetas en GitHub Pages (ej. /nivelacion-lagos/)
  */
 
-const CACHE_NAME = 'topolago-ghpages-v1.2.1';
+const CACHE_NAME = 'topolago-ghpages-v1.2.2';
 
 const ASSETS_RELATIVE = [
   './',

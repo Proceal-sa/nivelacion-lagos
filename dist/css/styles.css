@@ -2003,18 +2003,22 @@ body.map-fullscreen-active {
    Y CRUCETA DIRECCIONAL (D-PAD) PARA TEODOLITO Y MIRA
    ========================================================================== */
 .quad-focused-container {
-  position: fixed !important;
-  inset: 0 !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100vw !important;
-  height: 100dvh !important;
-  z-index: 10000 !important;
-  background: #0b0f19 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
+  position: fixed;
+  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 10000;
+  background: #0b0f19;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
   color: #f8fafc;
+}
+
+.quad-focused-container.open {
+  display: flex !important;
 }
 
 .quad-header-bar {
@@ -2031,10 +2035,30 @@ body.map-fullscreen-active {
 .quad-nav-btn {
   font-size: 0.78rem !important;
   font-weight: 800 !important;
-  padding: 5px 10px !important;
-  min-height: 34px !important;
+  padding: 5px 12px !important;
+  min-height: 36px !important;
   border-radius: 8px !important;
   white-space: nowrap;
+  color: #ffffff !important;
+  background: #1e293b !important;
+  border: 1.5px solid #475569 !important;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.quad-nav-btn:hover,
+.quad-nav-btn:focus-visible {
+  background: #334155 !important;
+  border-color: #64748b !important;
+  color: #ffffff !important;
+}
+
+.quad-nav-btn:active {
+  background: #0284c7 !important;
+  border-color: #38bdf8 !important;
 }
 
 .quad-selector-group {
@@ -2063,17 +2087,23 @@ body.map-fullscreen-active {
 }
 
 .quad-cell-select {
-  background: #0284c7;
-  color: #ffffff;
-  border: 1.5px solid #38bdf8;
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1.5px solid #38bdf8 !important;
   font-weight: 800;
-  font-size: 0.78rem;
-  padding: 5px 8px;
+  font-size: 0.8rem;
+  padding: 6px 10px;
   border-radius: 8px;
   flex: 1;
-  max-width: 220px;
+  max-width: 240px;
   text-overflow: ellipsis;
   cursor: pointer;
+  outline: none;
+}
+
+.quad-cell-select option {
+  background: #0f172a;
+  color: #f8fafc;
 }
 
 /* Pantalla Dividida (Split Screen) */
@@ -2561,11 +2591,74 @@ body.map-fullscreen-active {
   margin-top: 4px;
 }
 
-.quad-save-btn,
-.quad-exit-btn {
+.quad-save-btn {
   flex: 1;
-  min-height: 40px;
-  font-size: 0.8rem;
+  min-height: 42px;
+  font-size: 0.82rem;
   font-weight: 800;
   border-radius: 8px;
 }
+
+.quad-exit-btn {
+  flex: 1;
+  min-height: 42px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  border-radius: 8px;
+  color: #ffffff !important;
+  background: #1e293b !important;
+  border: 1.5px solid #475569 !important;
+  cursor: pointer;
+}
+
+.quad-exit-btn:hover,
+.quad-exit-btn:focus-visible {
+  background: #334155 !important;
+  border-color: #64748b !important;
+  color: #ffffff !important;
+}
+
+.quad-exit-btn:active {
+  background: #0284c7 !important;
+  border-color: #38bdf8 !important;
+}
+
+/* ==========================================================================
+   ESTILOS DE ALTO CONTRASTE PARA INPUTS Y SELECTS EN VISTA DE CUADRANTE
+   ========================================================================== */
+.quad-focused-container input[type="number"],
+.quad-focused-container input[type="text"],
+.quad-focused-container select {
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px;
+}
+
+.quad-focused-container input[type="number"]:focus,
+.quad-focused-container input[type="text"]:focus,
+.quad-focused-container select:focus {
+  border-color: #38bdf8 !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.quad-focused-container .form-control {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+/* ==========================================================================
+   REGLAS CRÍTICAS DE OCULTACIÓN (ALTA PRIORIDAD)
+   Garantiza que cualquier elemento con atributo hidden o clase .hidden/.modal-hidden
+   permanezca completamente invisible e inactivo independientemente de otras reglas.
+   ========================================================================== */
+[hidden],
+.hidden,
+.modal-hidden {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+

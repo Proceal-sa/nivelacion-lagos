@@ -6,6 +6,26 @@
 (function () {
   'use strict';
 
+  // Polyfill de seguridad para CanvasRenderingContext2D.roundRect en dispositivos móviles
+  if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
+      if (!radii) {
+        this.rect(x, y, w, h);
+        return this;
+      }
+      const r = Array.isArray(radii) ? radii[0] : (typeof radii === 'number' ? radii : 0);
+      const radius = Math.min(Math.max(0, r), Math.abs(w) / 2, Math.abs(h) / 2);
+      this.beginPath();
+      this.moveTo(x + radius, y);
+      this.arcTo(x + w, y, x + w, y + h, radius);
+      this.arcTo(x + w, y + h, x, y + h, radius);
+      this.arcTo(x, y + h, x, y, radius);
+      this.arcTo(x, y, x + w, y, radius);
+      this.closePath();
+      return this;
+    };
+  }
+
   // --- ESTADO DE LA APLICACIÓN ---
   const state = {
     project: null,
@@ -462,6 +482,25 @@
     cacheDomElements();
     initTheme();
     loadSavedMachineryParams();
+
+    // Garantizar que modales, hud de cadenero y vista enfocada de cuadrante inicien 100% ocultos
+    if (dom.viewQuadFocused) {
+      dom.viewQuadFocused.classList.remove('open');
+      dom.viewQuadFocused.classList.add('hidden');
+      dom.viewQuadFocused.setAttribute('hidden', '');
+      dom.viewQuadFocused.style.display = 'none';
+    }
+    if (dom.cadeneroTopHud) {
+      dom.cadeneroTopHud.classList.add('hidden');
+      dom.cadeneroTopHud.setAttribute('hidden', '');
+      dom.cadeneroTopHud.style.display = 'none';
+    }
+    if (dom.cadeneroBottomHud) {
+      dom.cadeneroBottomHud.classList.add('hidden');
+      dom.cadeneroBottomHud.setAttribute('hidden', '');
+      dom.cadeneroBottomHud.style.display = 'none';
+    }
+
     setupEventListeners();
     setupHistoryListener();
     setupSwipeBackGesture();
@@ -1143,8 +1182,14 @@
     if (dom.cadDyInput) dom.cadDyInput.value = '0.0';
     if (dom.cadReadingInput) dom.cadReadingInput.value = '';
 
-    if (dom.cadeneroTopHud) dom.cadeneroTopHud.style.display = 'flex';
+    if (dom.cadeneroTopHud) {
+      dom.cadeneroTopHud.classList.remove('hidden');
+      dom.cadeneroTopHud.removeAttribute('hidden');
+      dom.cadeneroTopHud.style.display = 'flex';
+    }
     if (dom.cadeneroBottomHud) {
+      dom.cadeneroBottomHud.classList.remove('hidden');
+      dom.cadeneroBottomHud.removeAttribute('hidden');
       dom.cadeneroBottomHud.style.display = 'block';
       dom.cadeneroBottomHud.classList.remove('collapsed');
     }
@@ -1163,8 +1208,16 @@
 
   function exitCadeneroMode() {
     state.cadeneroMode = false;
-    if (dom.cadeneroTopHud) dom.cadeneroTopHud.style.display = 'none';
-    if (dom.cadeneroBottomHud) dom.cadeneroBottomHud.style.display = 'none';
+    if (dom.cadeneroTopHud) {
+      dom.cadeneroTopHud.classList.add('hidden');
+      dom.cadeneroTopHud.setAttribute('hidden', '');
+      dom.cadeneroTopHud.style.display = 'none';
+    }
+    if (dom.cadeneroBottomHud) {
+      dom.cadeneroBottomHud.classList.add('hidden');
+      dom.cadeneroBottomHud.setAttribute('hidden', '');
+      dom.cadeneroBottomHud.style.display = 'none';
+    }
     if (history.state && history.state.modal === 'cadenero-mode') {
       history.back();
     }
@@ -1312,96 +1365,146 @@
   }
 
   function resizeQuadCanvas() {
-    const canvas = dom.quadCanvas;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(300, Math.round(rect.width * dpr));
-    const h = Math.max(200, Math.round(rect.height * dpr));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
+    try {
+      const canvas = dom.quadCanvas;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const clientW = rect.width || canvas.clientWidth || 320;
+      const clientH = rect.height || canvas.clientHeight || 240;
+      const w = Math.max(300, Math.round(clientW * dpr));
+      const h = Math.max(200, Math.round(clientH * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+    } catch (e) {
+      console.error('Error en resizeQuadCanvas:', e);
     }
   }
 
   function openQuadFocusedView(targetCell = null) {
-    const cells = buildLakeCells();
-    if (cells.length === 0) {
-      alert('Se requieren al menos 3 o 4 estacas adyacentes para formar un cuadro.');
-      return;
-    }
+    try {
+      const cells = buildLakeCells();
+      if (!cells || cells.length === 0) {
+        alert('Se requieren al menos 3 o 4 estacas adyacentes para formar un cuadro.');
+        return;
+      }
 
-    const cell = targetCell || cells[0];
-    state.quadFocus.activeCell = cell;
+      const cell = targetCell || cells[0];
+      state.quadFocus.activeCell = cell;
 
-    populateQuadCellSelect(cell.id);
+      if (dom.quadCellSelect) {
+        populateQuadCellSelect(cell.id);
+      }
 
-    // Calcular dimensiones base
-    const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
-    const LX = Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0;
-    const LY = Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0;
+      // Calcular dimensiones base
+      const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
+      const LX = (p00 && p10) ? (Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0) : 15.0;
+      const LY = (p00 && p01) ? (Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0) : 15.0;
 
-    // Iniciar el puntero en el centro exacto del cuadro
-    state.quadFocus.dX = Math.round((LX / 2) * 20) / 20;
-    state.quadFocus.dY = Math.round((LY / 2) * 20) / 20;
+      // Iniciar el puntero en el centro exacto del cuadro
+      state.quadFocus.dX = Math.round((LX / 2) * 20) / 20;
+      state.quadFocus.dY = Math.round((LY / 2) * 20) / 20;
 
-    if (dom.quadActiveTag) {
-      dom.quadActiveTag.textContent = `CUADRANTE: ${cell.label}`;
-    }
+      if (dom.quadActiveTag) {
+        dom.quadActiveTag.textContent = `CUADRANTE: ${cell.label}`;
+      }
 
-    // Poblar dropdown de calibración rápida con las estacas del cuadrante
-    if (dom.quadCalibStakeSel) {
-      let calibOpts = '';
-      cell.stakes.forEach(s => {
-        calibOpts += `<option value="${s.id}">${s.code.replace('-', '')} (Z=${s.designElevation.toFixed(3)}m)</option>`;
+      // Poblar dropdown de calibración rápida con las estacas del cuadrante
+      if (dom.quadCalibStakeSel && cell.stakes) {
+        let calibOpts = '';
+        cell.stakes.forEach(s => {
+          const zVal = (typeof s.designElevation === 'number') ? s.designElevation.toFixed(3) : '---';
+          calibOpts += `<option value="${s.id}">${s.code.replace('-', '')} (Z=${zVal}m)</option>`;
+        });
+        dom.quadCalibStakeSel.innerHTML = calibOpts;
+      }
+
+      if (dom.quadCalibDrawer) dom.quadCalibDrawer.style.display = 'none';
+      if (dom.quadActualReading) dom.quadActualReading.value = '';
+
+      // Mostrar contenedor removiendo clases ocultas y atributo hidden
+      if (dom.viewQuadFocused) {
+        dom.viewQuadFocused.classList.remove('hidden');
+        dom.viewQuadFocused.classList.remove('modal-hidden');
+        dom.viewQuadFocused.removeAttribute('hidden');
+        dom.viewQuadFocused.classList.add('open');
+        dom.viewQuadFocused.style.display = 'flex';
+      }
+
+      // Esperar requestAnimationFrame para garantizar que el reflow del navegador haya terminado
+      requestAnimationFrame(() => {
+        try {
+          resizeQuadCanvas();
+          updateQuadCalculations();
+          renderQuadCanvas();
+        } catch (rErr) {
+          console.error('Error renderizando cuadrante tras reflow:', rErr);
+        }
       });
-      dom.quadCalibStakeSel.innerHTML = calibOpts;
+
+      pushNavigationState(state.currentTab, 'quad-focused-view');
+    } catch (err) {
+      console.error('Error en openQuadFocusedView:', err);
     }
-
-    if (dom.quadCalibDrawer) dom.quadCalibDrawer.style.display = 'none';
-    if (dom.quadActualReading) dom.quadActualReading.value = '';
-
-    dom.viewQuadFocused.style.display = 'flex';
-
-    resizeQuadCanvas();
-    updateQuadCalculations();
-    renderQuadCanvas();
-
-    pushNavigationState(state.currentTab, 'quad-focused-view');
   }
 
   function closeQuadFocusedView() {
-    if (dom.viewQuadFocused) dom.viewQuadFocused.style.display = 'none';
-    if (history.state && history.state.modal === 'quad-focused-view') {
-      history.back();
+    try {
+      if (dom.viewQuadFocused) {
+        dom.viewQuadFocused.classList.remove('open');
+        dom.viewQuadFocused.classList.add('hidden');
+        dom.viewQuadFocused.setAttribute('hidden', '');
+        dom.viewQuadFocused.style.display = 'none';
+      }
+      if (history.state && history.state.modal === 'quad-focused-view') {
+        history.back();
+      }
+      if (typeof renderCanvas2D === 'function') {
+        renderCanvas2D();
+      }
+    } catch (err) {
+      console.error('Error cerrando cuadrante:', err);
+    } finally {
+      if (dom.viewQuadFocused) {
+        dom.viewQuadFocused.classList.remove('open');
+        dom.viewQuadFocused.classList.add('hidden');
+        dom.viewQuadFocused.setAttribute('hidden', '');
+        dom.viewQuadFocused.style.display = 'none';
+      }
     }
-    renderCanvas2D();
   }
 
   function switchQuadCell(cell) {
-    if (!cell) return;
-    state.quadFocus.activeCell = cell;
-    if (dom.quadCellSelect) dom.quadCellSelect.value = cell.id;
-    if (dom.quadActiveTag) dom.quadActiveTag.textContent = `CUADRANTE: ${cell.label}`;
+    try {
+      if (!cell) return;
+      state.quadFocus.activeCell = cell;
+      if (dom.quadCellSelect) dom.quadCellSelect.value = cell.id;
+      if (dom.quadActiveTag) dom.quadActiveTag.textContent = `CUADRANTE: ${cell.label}`;
 
-    // Calcular dimensiones base y centrar
-    const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
-    const LX = Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0;
-    const LY = Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0;
-    state.quadFocus.dX = Math.round((LX / 2) * 20) / 20;
-    state.quadFocus.dY = Math.round((LY / 2) * 20) / 20;
+      // Calcular dimensiones base y centrar
+      const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
+      const LX = (p00 && p10) ? (Math.hypot(p10.x - p00.x, p10.y - p00.y) || 15.0) : 15.0;
+      const LY = (p00 && p01) ? (Math.hypot(p01.x - p00.x, p01.y - p00.y) || 15.0) : 15.0;
+      state.quadFocus.dX = Math.round((LX / 2) * 20) / 20;
+      state.quadFocus.dY = Math.round((LY / 2) * 20) / 20;
 
-    // Actualizar selector de calibración
-    if (dom.quadCalibStakeSel) {
-      let calibOpts = '';
-      cell.stakes.forEach(s => {
-        calibOpts += `<option value="${s.id}">${s.code.replace('-', '')} (Z=${s.designElevation.toFixed(3)}m)</option>`;
-      });
-      dom.quadCalibStakeSel.innerHTML = calibOpts;
+      // Actualizar selector de calibración
+      if (dom.quadCalibStakeSel && cell.stakes) {
+        let calibOpts = '';
+        cell.stakes.forEach(s => {
+          const zVal = (typeof s.designElevation === 'number') ? s.designElevation.toFixed(3) : '---';
+          calibOpts += `<option value="${s.id}">${s.code.replace('-', '')} (Z=${zVal}m)</option>`;
+        });
+        dom.quadCalibStakeSel.innerHTML = calibOpts;
+      }
+
+      updateQuadCalculations();
+      renderQuadCanvas();
+    } catch (err) {
+      console.error('Error en switchQuadCell:', err);
     }
-
-    updateQuadCalculations();
-    renderQuadCanvas();
   }
 
   function updateQuadCalculations() {
@@ -1531,17 +1634,20 @@
   }
 
   function renderQuadCanvas() {
-    const canvas = dom.quadCanvas;
-    if (!canvas) return;
-    resizeQuadCanvas();
+    try {
+      const canvas = dom.quadCanvas;
+      if (!canvas) return;
+      resizeQuadCanvas();
 
-    const cell = state.quadFocus.activeCell;
-    if (!cell) return;
+      const cell = state.quadFocus.activeCell;
+      if (!cell || !cell.p00 || !cell.p10 || !cell.p01 || !cell.p11) return;
 
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const w = canvas.width;
+      const h = canvas.height;
+      if (w <= 0 || h <= 0) return;
+      ctx.clearRect(0, 0, w, h);
 
     const dpr = window.devicePixelRatio || 1;
     const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01, p11 = cell.p11;
@@ -1858,6 +1964,9 @@
     ctx.font = `bold ${Math.max(9, 10 * dpr)}px monospace`;
     ctx.fillStyle = '#38bdf8';
     ctx.fillText(l2, ptTarget.x, cardY + 18 * dpr);
+    } catch (err) {
+      console.error('Error en renderQuadCanvas:', err);
+    }
   }
 
   function handleQuadCanvasTouch(clientX, clientY) {
@@ -4379,7 +4488,10 @@
       const targetTab = event.state?.tab || 'tab-grid';
 
       // 0. Manejo de Vista Enfocada de Cuadrante (4 Estacas)
-      if (dom.viewQuadFocused && dom.viewQuadFocused.style.display !== 'none' && targetModal !== 'quad-focused-view') {
+      if (dom.viewQuadFocused && (dom.viewQuadFocused.style.display !== 'none' || dom.viewQuadFocused.classList.contains('open')) && targetModal !== 'quad-focused-view') {
+        dom.viewQuadFocused.classList.remove('open');
+        dom.viewQuadFocused.classList.add('hidden');
+        dom.viewQuadFocused.setAttribute('hidden', '');
         dom.viewQuadFocused.style.display = 'none';
         renderCanvas2D();
       }
@@ -4387,8 +4499,16 @@
       // 1. Manejo de Modo Cadenero
       if (state.cadeneroMode && targetModal !== 'cadenero-mode') {
         state.cadeneroMode = false;
-        if (dom.cadeneroTopHud) dom.cadeneroTopHud.style.display = 'none';
-        if (dom.cadeneroBottomHud) dom.cadeneroBottomHud.style.display = 'none';
+        if (dom.cadeneroTopHud) {
+          dom.cadeneroTopHud.classList.add('hidden');
+          dom.cadeneroTopHud.setAttribute('hidden', '');
+          dom.cadeneroTopHud.style.display = 'none';
+        }
+        if (dom.cadeneroBottomHud) {
+          dom.cadeneroBottomHud.classList.add('hidden');
+          dom.cadeneroBottomHud.setAttribute('hidden', '');
+          dom.cadeneroBottomHud.style.display = 'none';
+        }
         renderCanvas2D();
       }
 
@@ -4739,8 +4859,26 @@
     }
 
     // Navegación y controles de la Vista Enfocada de Cuadrante
-    if (dom.quadBtnBack) dom.quadBtnBack.addEventListener('click', closeQuadFocusedView);
-    if (dom.quadBtnExitBottom) dom.quadBtnExitBottom.addEventListener('click', closeQuadFocusedView);
+    if (dom.quadBtnBack) {
+      dom.quadBtnBack.addEventListener('click', (e) => {
+        e.preventDefault();
+        try {
+          closeQuadFocusedView();
+        } catch (err) {
+          console.error('Error al volver al lago:', err);
+        }
+      });
+    }
+    if (dom.quadBtnExitBottom) {
+      dom.quadBtnExitBottom.addEventListener('click', (e) => {
+        e.preventDefault();
+        try {
+          closeQuadFocusedView();
+        } catch (err) {
+          console.error('Error al salir a malla completa:', err);
+        }
+      });
+    }
 
     if (dom.quadBtnCenterPointer) {
       dom.quadBtnCenterPointer.addEventListener('click', () => {
@@ -5653,32 +5791,38 @@
           }
         } else {
           // Si hace clic dentro de cualquier cuadro en modo normal, detectar la celda y abrir la Vista Enfocada de Cuadrante (4 Estacas)
-          const pondPos = getPondCoords(pos.x, pos.y);
-          if (pondPos.x >= 0 && pondPos.y >= 0) {
-            const cell = findCellAtPondPos(pondPos.x, pondPos.y);
-            if (cell) {
-              openQuadFocusedView(cell);
-              const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
-              const vXx = p10.x - p00.x, vXy = p10.y - p00.y;
-              const LX = Math.hypot(vXx, vXy) || 15.0;
-              const uXx = vXx / LX, uXy = vXy / LX;
+          try {
+            const pondPos = getPondCoords(pos.x, pos.y);
+            if (pondPos.x >= 0 && pondPos.y >= 0) {
+              const cell = findCellAtPondPos(pondPos.x, pondPos.y);
+              if (cell) {
+                openQuadFocusedView(cell);
+                const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01;
+                if (p00 && p10 && p01) {
+                  const vXx = p10.x - p00.x, vXy = p10.y - p00.y;
+                  const LX = Math.hypot(vXx, vXy) || 15.0;
+                  const uXx = vXx / LX, uXy = vXy / LX;
 
-              const vYx = p01.x - p00.x, vYy = p01.y - p00.y;
-              const LY = Math.hypot(vYx, vYy) || 15.0;
-              const uYx = vYx / LY, uYy = vYy / LY;
+                  const vYx = p01.x - p00.x, vYy = p01.y - p00.y;
+                  const LY = Math.hypot(vYx, vYy) || 15.0;
+                  const uYx = vYx / LY, uYy = vYy / LY;
 
-              const deltaX = pondPos.x - p00.x;
-              const deltaY = pondPos.y - p00.y;
-              const det = (uXx * uYy) - (uXy * uYx);
-              if (Math.abs(det) > 1e-5) {
-                const dx = (deltaX * uYy - deltaY * uYx) / det;
-                const dy = (uXx * deltaY - uXy * deltaX) / det;
-                state.quadFocus.dX = Math.round(dx * 20) / 20;
-                state.quadFocus.dY = Math.round(dy * 20) / 20;
-                updateQuadCalculations();
-                renderQuadCanvas();
+                  const deltaX = pondPos.x - p00.x;
+                  const deltaY = pondPos.y - p00.y;
+                  const det = (uXx * uYy) - (uXy * uYx);
+                  if (Math.abs(det) > 1e-5) {
+                    const dx = (deltaX * uYy - deltaY * uYx) / det;
+                    const dy = (uXx * deltaY - uXy * deltaX) / det;
+                    state.quadFocus.dX = Math.round(dx * 20) / 20;
+                    state.quadFocus.dY = Math.round(dy * 20) / 20;
+                    updateQuadCalculations();
+                    renderQuadCanvas();
+                  }
+                }
               }
             }
+          } catch (cErr) {
+            console.error('Error al detectar clic en celda de cuadrante:', cErr);
           }
         }
       }

@@ -86,6 +86,103 @@
     }
   };
 
+  // --- HELPERS DE RENDIMIENTO Y ARQUITECTURA RETINA iOS (v1.3.0) ---
+  function getDpr() {
+    return Math.min(window.devicePixelRatio || 1, 3);
+  }
+
+  function parseMetricInput(val, fallback = NaN) {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'number') return isNaN(val) ? fallback : val;
+    const str = String(val).trim().replace(',', '.');
+    if (str === '') return fallback;
+    const num = parseFloat(str);
+    return isNaN(num) ? fallback : num;
+  }
+
+  let debounceStakeTimers = new Map();
+  function debouncedSaveStake(stake, delay = 250) {
+    if (!stake || !stake.id) return;
+    if (debounceStakeTimers.has(stake.id)) {
+      clearTimeout(debounceStakeTimers.get(stake.id));
+    }
+    const timer = setTimeout(async () => {
+      debounceStakeTimers.delete(stake.id);
+      try {
+        if (window.topoDB) {
+          await window.topoDB.saveStake(stake);
+        }
+        requestPersistentStorage();
+      } catch (e) {
+        console.error('Error guardando estaca con debounce:', e);
+      }
+    }, delay);
+    debounceStakeTimers.set(stake.id, timer);
+  }
+
+  async function requestPersistentStorage() {
+    if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
+      try {
+        const isPersisted = await navigator.storage.persisted();
+        if (!isPersisted) {
+          const granted = await navigator.storage.persist();
+          console.log('[Storage] Persistencia solicitada:', granted ? 'Concedida' : 'Denegada');
+        } else {
+          console.log('[Storage] Almacenamiento ya es persistente.');
+        }
+      } catch (e) {
+        console.warn('[Storage] Error al solicitar almacenamiento persistente:', e);
+      }
+    }
+  }
+
+  function setupCanvasResizeObservers() {
+    if (typeof ResizeObserver === 'undefined') return;
+
+    let rafId = null;
+    const observer = new ResizeObserver(() => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (dom.canvas2DWrapper && document.getElementById('tab-2d')?.classList.contains('active')) {
+          resizeCanvasToContainer();
+          renderCanvas2D();
+        }
+        if (dom.quadCanvas && dom.viewQuadFocused && !dom.viewQuadFocused.classList.contains('hidden')) {
+          resizeQuadCanvas();
+          renderQuadCanvas();
+        }
+      });
+    });
+
+    if (dom.canvas2DWrapper) observer.observe(dom.canvas2DWrapper);
+    const quadZone = document.querySelector('.quad-zone-canvas');
+    if (quadZone) observer.observe(quadZone);
+  }
+
+  function setupVisualViewportHandler() {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+
+    function onViewportChange() {
+      const vp = window.visualViewport;
+      const windowH = window.innerHeight;
+      const keyboardH = Math.max(0, windowH - vp.height - vp.offsetTop);
+
+      const quadEvalCard = document.querySelector('.quad-eval-card');
+      if (quadEvalCard) {
+        if (keyboardH > 50) {
+          const offsetPx = Math.min(keyboardH, 260);
+          quadEvalCard.style.transform = `translate3d(0, -${offsetPx}px, 0)`;
+          quadEvalCard.style.transition = 'transform 0.25s cubic-bezier(0.1, 0.9, 0.2, 1)';
+        } else {
+          quadEvalCard.style.transform = '';
+        }
+      }
+    }
+
+    window.visualViewport.addEventListener('resize', onViewportChange);
+    window.visualViewport.addEventListener('scroll', onViewportChange);
+  }
+
   // --- ELEMENTOS DEL DOM ---
   const dom = {};
 
@@ -377,6 +474,10 @@
     dom.expDecimal = document.getElementById('exp-decimal');
     dom.btnExportCsv = document.getElementById('btn-export-csv');
     dom.btnExportJsonBackup = document.getElementById('btn-export-json-backup');
+    dom.btnImportJsonBackup = document.getElementById('btn-import-json-backup');
+    dom.btnHeaderExportJson = document.getElementById('btn-header-export-json');
+    dom.btnHeaderImportJson = document.getElementById('btn-header-import-json');
+    dom.inputImportJsonFile = document.getElementById('input-import-json-file');
     dom.carteraTableBody = document.getElementById('cartera-table-body');
 
     // Modal Lectura de Estaca & Teclado
@@ -482,6 +583,9 @@
     cacheDomElements();
     initTheme();
     loadSavedMachineryParams();
+    requestPersistentStorage();
+    setupCanvasResizeObservers();
+    setupVisualViewportHandler();
 
     // Garantizar que modales, hud de cadenero y vista enfocada de cuadrante inicien 100% ocultos
     if (dom.viewQuadFocused) {
@@ -942,7 +1046,7 @@
 
     const spanX = Math.max(10, tMaxX - tMinX);
     const spanY = Math.max(10, tMaxY - tMinY);
-    const padding = 50 * (window.devicePixelRatio || 1);
+    const padding = 50 * getDpr();
     const canvasW = canvas && canvas.width ? canvas.width : 800;
     const canvasH = canvas && canvas.height ? canvas.height : 500;
     const availW = canvasW - padding * 2;
@@ -975,7 +1079,7 @@
     const wrapper = dom.canvas2DWrapper;
     if (!canvas || !wrapper) return;
     const rect = wrapper.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getDpr();
     const w = Math.max(300, Math.round(rect.width * dpr));
     const h = Math.max(200, Math.round(rect.height * dpr));
     if (canvas.width !== w || canvas.height !== h) {
@@ -993,7 +1097,7 @@
     if (!canvas) return;
     const canvasW = canvas.width || 800;
     const canvasH = canvas.height || 500;
-    const padding = 50 * (window.devicePixelRatio || 1);
+    const padding = 50 * getDpr();
     const t = transform.toTransformed(worldX, worldY);
 
     state.canvas.panX = (canvasW / 2) - padding - (t.x - transform.tMinX) * transform.scale;
@@ -1087,8 +1191,8 @@
     const baseStake = state.cadenero.baseStake || state.stakes[0];
     if (!baseStake || !state.project) return;
 
-    const dx = parseFloat(dom.cadDxInput?.value) || 0;
-    const dy = parseFloat(dom.cadDyInput?.value) || 0;
+    const dx = parseMetricInput(dom.cadDxInput?.value, 0);
+    const dy = parseMetricInput(dom.cadDyInput?.value, 0);
 
     state.cadenero.dX = dx;
     state.cadenero.dY = dy;
@@ -1126,7 +1230,7 @@
     }
 
     // Lectura Real opcional
-    const readingVal = parseFloat(dom.cadReadingInput?.value);
+    const readingVal = parseMetricInput(dom.cadReadingInput?.value);
     if (!isNaN(readingVal) && isFinite(readingVal) && state.activeStation) {
       const actualTerrain = state.activeStation.hi - readingVal;
       const cutFill = actualTerrain - designElev;
@@ -1228,9 +1332,9 @@
     const baseStake = state.cadenero.baseStake || state.stakes[0];
     if (!baseStake) return;
 
-    const dx = parseFloat(dom.cadDxInput?.value) || 0;
-    const dy = parseFloat(dom.cadDyInput?.value) || 0;
-    const realReading = parseFloat(dom.cadReadingInput?.value);
+    const dx = parseMetricInput(dom.cadDxInput?.value, 0);
+    const dy = parseMetricInput(dom.cadDyInput?.value, 0);
+    const realReading = parseMetricInput(dom.cadReadingInput?.value);
     const hasReading = !isNaN(realReading) && isFinite(realReading);
     const actualElev = (hasReading && state.activeStation) ? (state.activeStation.hi - realReading) : null;
     const cutFill = actualElev !== null ? (actualElev - state.cadenero.designElev) : null;
@@ -1369,7 +1473,7 @@
       const canvas = dom.quadCanvas;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = getDpr();
       const clientW = rect.width || canvas.clientWidth || 320;
       const clientH = rect.height || canvas.clientHeight || 240;
       const w = Math.max(300, Math.round(clientW * dpr));
@@ -1614,7 +1718,7 @@
     }
 
     // Evaluación de Lectura Real
-    const readingVal = parseFloat(dom.quadActualReading?.value);
+    const readingVal = parseMetricInput(dom.quadActualReading?.value);
     if (!isNaN(readingVal) && isFinite(readingVal) && hasStation) {
       const actualElev = hi - readingVal;
       const cutFill = actualElev - designElev;
@@ -1649,7 +1753,7 @@
       if (w <= 0 || h <= 0) return;
       ctx.clearRect(0, 0, w, h);
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getDpr();
     const p00 = cell.p00, p10 = cell.p10, p01 = cell.p01, p11 = cell.p11;
     const allStakes = [p00, p10, p11, p01];
 
@@ -2033,7 +2137,7 @@
     const p00 = cell.p00;
     const dx = state.quadFocus.dX;
     const dy = state.quadFocus.dY;
-    const realReading = parseFloat(dom.quadActualReading?.value);
+    const realReading = parseMetricInput(dom.quadActualReading?.value);
     const hasReading = !isNaN(realReading) && isFinite(realReading);
     const hasStation = state.activeStation && typeof state.activeStation.hi === 'number';
     const actualElev = (hasReading && hasStation) ? (state.activeStation.hi - realReading) : null;
@@ -2073,7 +2177,7 @@
       return;
     }
 
-    const reading = parseFloat(dom.quadCalibReadingInput.value);
+    const reading = parseMetricInput(dom.quadCalibReadingInput.value);
     if (isNaN(reading) || reading <= 0) {
       alert('Ingrese una lectura de mira válida en metros (ej. 1.750).');
       return;
@@ -2113,11 +2217,14 @@
     const canvas = dom.lakeTinCanvas;
     if (!canvas || state.stakes.length === 0) return;
 
-    // Ajustar resolución interna al tamaño CSS
+    // Ajustar resolución interna al tamaño CSS con Super Retina @3x cap
     const rect = canvas.getBoundingClientRect();
-    if (canvas.width !== rect.width * (window.devicePixelRatio || 1) || canvas.height !== rect.height * (window.devicePixelRatio || 1)) {
-      canvas.width = rect.width * (window.devicePixelRatio || 1);
-      canvas.height = rect.height * (window.devicePixelRatio || 1);
+    const dpr = getDpr();
+    const targetW = Math.max(300, Math.round(rect.width * dpr));
+    const targetH = Math.max(200, Math.round(rect.height * dpr));
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
     }
 
     const ctx = canvas.getContext('2d');
@@ -2176,7 +2283,7 @@
 
     // Flecha Eje +X
     const dirX = Math.atan2(pXEnd.y - pXStart.y, pXEnd.x - pXStart.x);
-    const arrowLenX = 14 * (window.devicePixelRatio || 1);
+    const arrowLenX = 14 * dpr;
     ctx.fillStyle = axisColorX;
     ctx.beginPath();
     ctx.moveTo(pXEnd.x, pXEnd.y);
@@ -2186,7 +2293,7 @@
     ctx.fill();
 
     // Rótulo Eje X
-    ctx.font = `bold ${Math.max(10, 11 * (window.devicePixelRatio || 1))}px sans-serif`;
+    ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
     ctx.fillStyle = axisColorX;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
@@ -2204,7 +2311,7 @@
 
     // Flecha Eje +Y
     const dirY = Math.atan2(pYEnd.y - pYStart.y, pYEnd.x - pYStart.x);
-    const arrowLenY = 14 * (window.devicePixelRatio || 1);
+    const arrowLenY = 14 * dpr;
     ctx.fillStyle = axisColorY;
     ctx.beginPath();
     ctx.moveTo(pYEnd.x, pYEnd.y);
@@ -2220,7 +2327,7 @@
     ctx.fillText('Eje Y (X = 0.00m)', pYEnd.x, pYEnd.y - 8);
 
     // Graduaciones métricas cada 10 metros en Ejes X e Y
-    ctx.font = `${Math.max(9, 10 * (window.devicePixelRatio || 1))}px monospace`;
+    ctx.font = `${Math.max(9, 10 * dpr)}px monospace`;
     ctx.fillStyle = isDark ? '#94a3b8' : '#475569';
     ctx.lineWidth = 1.5;
 
@@ -2260,9 +2367,9 @@
     // Punto Origen O(0, 0)
     ctx.fillStyle = isDark ? '#ffffff' : '#000000';
     ctx.beginPath();
-    ctx.arc(pOrigin.x, pOrigin.y, 4 * (window.devicePixelRatio || 1), 0, Math.PI * 2);
+    ctx.arc(pOrigin.x, pOrigin.y, 4 * dpr, 0, Math.PI * 2);
     ctx.fill();
-    ctx.font = `bold ${Math.max(9, 10 * (window.devicePixelRatio || 1))}px sans-serif`;
+    ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
     ctx.fillText('O (0,0)', pOrigin.x - 6, pOrigin.y - 6);
@@ -2296,7 +2403,7 @@
       ctx.stroke();
 
       // Rótulos de retiros de A1
-      ctx.font = `bold ${Math.max(9, 10 * (window.devicePixelRatio || 1))}px sans-serif`;
+      ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
       ctx.fillStyle = isDark ? '#fbbf24' : '#b45309';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
@@ -2366,7 +2473,7 @@
       const midD1 = { x: (ptA1.x + ptB2.x) / 2, y: (ptA1.y + ptB2.y) / 2 };
       const midD2 = { x: (ptA2.x + ptB1.x) / 2, y: (ptA2.y + ptB1.y) / 2 };
 
-      ctx.font = `bold ${Math.max(9, 10 * (window.devicePixelRatio || 1))}px sans-serif`;
+      ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
@@ -2384,7 +2491,7 @@
       ctx.beginPath();
       const angleU_px = Math.atan2(ptA2.y - ptA1.y, ptA2.x - ptA1.x);
       const angleV_px = Math.atan2(ptB1.y - ptA1.y, ptB1.x - ptA1.x);
-      ctx.arc(ptA1.x, ptA1.y, 24 * (window.devicePixelRatio || 1), angleV_px, angleU_px, angleU_px < angleV_px);
+      ctx.arc(ptA1.x, ptA1.y, 24 * dpr, angleV_px, angleU_px, angleU_px < angleV_px);
       ctx.stroke();
       ctx.fillStyle = '#f59e0b';
       ctx.textAlign = 'left';
@@ -2421,7 +2528,6 @@
       }
 
       // 1.4 Dibujar AMBOS Taludes con flechas inclinadas hacia adentro despegándose del Eje X y Eje Y
-      const dpr = window.devicePixelRatio || 1;
       const taludColor = isDark ? '#38bdf8' : '#0284c7';
       ctx.strokeStyle = taludColor;
       ctx.lineWidth = 3;
@@ -2505,7 +2611,7 @@
         corners.forEach((cn, i) => {
           const cp = transform.toPx(cn.x, cn.y);
           ctx.fillStyle = isDark ? '#38bdf8' : '#0284c7';
-          ctx.font = `bold ${Math.max(10, 11 * (window.devicePixelRatio || 1))}px sans-serif`;
+          ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
           ctx.textAlign = 'center';
           ctx.fillText(`E${i + 1}`, cp.x, cp.y - 14);
         });
@@ -2544,7 +2650,7 @@
 
     // Dibujar etiquetas de distancia real en metros sobre las aristas
     if (showDist) {
-      ctx.font = `bold ${Math.max(10, 11 * (window.devicePixelRatio || 1))}px sans-serif`;
+      ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
@@ -2560,7 +2666,7 @@
 
         const label = `${edge.length.toFixed(1)}m`;
         const textWidth = ctx.measureText(label).width + 8;
-        const textHeight = 16 * (window.devicePixelRatio || 1);
+        const textHeight = 16 * dpr;
 
         ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)';
         ctx.strokeStyle = isDark ? '#475569' : '#cbd5e1';
@@ -2588,7 +2694,7 @@
         const spt = transform.toPx(s.x, s.y);
 
         const angle = Math.atan2(bpt.y - spt.y, bpt.x - spt.x);
-        const len = 16 * (window.devicePixelRatio || 1);
+        const len = 16 * dpr;
         const ax = spt.x + Math.cos(angle) * len;
         const ay = spt.y + Math.sin(angle) * len;
 
@@ -2611,7 +2717,6 @@
     }
 
     // 4. Dibujar Nodos de Estacas (Puntos Limpios y Proporcionados 5px-7px)
-    const dpr = window.devicePixelRatio || 1;
     const nodeRadius = Math.round(5.5 * dpr);
     const tolMeters = (state.project.settings.toleranceCm || 2.0) / 100;
     const showSecondary = (state.canvas.zoom >= 1.6) || state.isEditMode;
@@ -4329,28 +4434,98 @@
     URL.revokeObjectURL(url);
   }
 
-  // Respaldo en JSON
-  function exportJsonBackup() {
+  // Respaldo en JSON (Exportar / Importar con compatibilidad nativa iOS)
+  async function exportJsonBackup() {
+    requestPersistentStorage();
     const backupData = {
       project: state.project,
       stakes: state.stakes,
       stations: state.stations,
       auxPoints: state.auxPoints,
       exportedAt: new Date().toISOString(),
-      appVersion: '1.0.0'
+      appVersion: '1.3.0'
     };
 
     const jsonStr = JSON.stringify(backupData, null, 2);
+    const safeName = ((state.project && state.project.name) || 'Lago').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const fileName = `respaldo_topolago_${safeName}_${new Date().toISOString().slice(0, 10)}.json`;
     const blob = new Blob([jsonStr], { type: 'application/json' });
+
+    // Intentar compartir de forma nativa en iOS (AirDrop / WhatsApp / Archivos)
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+        const file = new File([blob], fileName, { type: 'application/json' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Respaldo TopoLago: ${safeName}`,
+            text: `Copia de seguridad topográfica de ${safeName} (${state.stakes.length} estacas).`,
+            files: [file]
+          });
+          return;
+        }
+      }
+    } catch (shareErr) {
+      if (shareErr.name === 'AbortError') return;
+      console.warn('Share API no completada, usando descarga clásica:', shareErr);
+    }
+
+    // Descarga directa fallback
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const safeName = (state.project.name || 'Lago').replace(/[^a-zA-Z0-9_\-]/g, '_');
     a.href = url;
-    a.download = `respaldo_topolago_${safeName}.json`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function importJsonBackup(file) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (!data || !data.project || !Array.isArray(data.stakes)) {
+        alert('El archivo no parece ser un respaldo válido de TopoPiscícola (faltan datos del proyecto o estacas).');
+        return;
+      }
+
+      const count = data.stakes.length;
+      const projName = data.project.name || 'Sin nombre';
+      const confirmMsg = `¿Deseas restaurar la copia de seguridad?\n\n• Proyecto: ${projName}\n• Estacas: ${count}\n• Fecha de respaldo: ${data.exportedAt ? new Date(data.exportedAt).toLocaleString() : 'N/D'}\n\n⚠️ Esto reemplazará los datos actuales del lago.`;
+      
+      if (!confirm(confirmMsg)) return;
+
+      await window.topoDB.saveProject(data.project);
+      if (Array.isArray(data.stakes) && data.stakes.length > 0) {
+        await window.topoDB.clearStakesForProject(data.project.id);
+        await window.topoDB.saveStakesBulk(data.stakes);
+      }
+      if (Array.isArray(data.stations) && data.stations.length > 0) {
+        for (const st of data.stations) {
+          await window.topoDB.saveStation(st);
+        }
+      }
+      if (Array.isArray(data.auxPoints)) {
+        for (const aux of data.auxPoints) {
+          await window.topoDB.saveAuxPoint(aux);
+        }
+      }
+
+      state.project = data.project;
+      state.stakes = data.stakes;
+      state.stations = data.stations || [];
+      state.auxPoints = data.auxPoints || [];
+      state.activeStation = state.stations.find(s => s.id === state.project.activeStationId) || state.stations[0] || null;
+
+      renderAll();
+      requestPersistentStorage();
+      alert(`¡Copia de seguridad restaurada con éxito! Se cargaron ${count} estacas.`);
+    } catch (err) {
+      console.error('Error al importar copia de seguridad:', err);
+      alert('Error al leer el archivo JSON: ' + (err.message || 'Formato inválido'));
+    }
   }
 
   // --- 8. EDICIÓN MANUAL DE COTA DE DISEÑO ---
@@ -4372,7 +4547,7 @@
     const stake = state.stakes[state.currentStakeIndex];
     if (!stake) return;
 
-    const newElev = parseFloat(dom.edInputElevation.value);
+    const newElev = parseMetricInput(dom.edInputElevation.value);
     if (isNaN(newElev)) {
       alert('Ingrese una cota de diseño válida en metros.');
       return;
@@ -4970,14 +5145,14 @@
     // Entradas directas dX y dY
     if (dom.quadInpDx) {
       dom.quadInpDx.addEventListener('input', () => {
-        state.quadFocus.dX = parseFloat(dom.quadInpDx.value) || 0;
+        state.quadFocus.dX = parseMetricInput(dom.quadInpDx.value, 0);
         updateQuadCalculations();
         renderQuadCanvas();
       });
     }
     if (dom.quadInpDy) {
       dom.quadInpDy.addEventListener('input', () => {
-        state.quadFocus.dY = parseFloat(dom.quadInpDy.value) || 0;
+        state.quadFocus.dY = parseMetricInput(dom.quadInpDy.value, 0);
         updateQuadCalculations();
         renderQuadCanvas();
       });
@@ -5265,9 +5440,30 @@
     // Aux tab
     dom.btnSaveAuxPoint.addEventListener('click', saveAuxPoint);
 
-    // Export tab
-    dom.btnExportCsv.addEventListener('click', exportCsvFile);
-    dom.btnExportJsonBackup.addEventListener('click', exportJsonBackup);
+    // Export tab & Copias de Seguridad Header/Tab
+    if (dom.btnExportCsv) dom.btnExportCsv.addEventListener('click', exportCsvFile);
+    if (dom.btnExportJsonBackup) dom.btnExportJsonBackup.addEventListener('click', exportJsonBackup);
+    if (dom.btnHeaderExportJson) dom.btnHeaderExportJson.addEventListener('click', exportJsonBackup);
+    if (dom.btnHeaderImportJson && dom.inputImportJsonFile) {
+      dom.btnHeaderImportJson.addEventListener('click', () => {
+        dom.inputImportJsonFile.value = '';
+        dom.inputImportJsonFile.click();
+      });
+    }
+    if (dom.btnImportJsonBackup && dom.inputImportJsonFile) {
+      dom.btnImportJsonBackup.addEventListener('click', () => {
+        dom.inputImportJsonFile.value = '';
+        dom.inputImportJsonFile.click();
+      });
+    }
+    if (dom.inputImportJsonFile) {
+      dom.inputImportJsonFile.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+          importJsonBackup(file);
+        }
+      });
+    }
 
     // Edit design modal
     dom.edBtnClose.addEventListener('click', closeEditDesignModal);
@@ -5400,8 +5596,8 @@
     const baseStake = getSelectedBaseStake();
     if (!baseStake || !state.project || !state.activeStation) return;
 
-    const dx = parseFloat(dom.offDxInput.value) || 0;
-    const dy = parseFloat(dom.offDyInput.value) || 0;
+    const dx = parseMetricInput(dom.offDxInput.value, 0);
+    const dy = parseMetricInput(dom.offDyInput.value, 0);
 
     // Orientar desfase a lo largo de los vectores reales de filas y columnas del lago
     const { uRow, uCol } = getLocalRowColVectors(baseStake);
@@ -5428,7 +5624,7 @@
     dom.offPointTag.value = window.TopoMath.getOffsetLabel(baseStake.code, dx, dy);
 
     // Lectura real opcional digitada
-    const realReading = parseFloat(dom.offReadingInput.value);
+    const realReading = parseMetricInput(dom.offReadingInput.value);
     const tolM = (state.project.settings.toleranceCm || 2.0) / 100;
 
     if (!isNaN(realReading) && dom.offReadingInput.value.trim() !== '') {
@@ -5592,8 +5788,8 @@
     if (!baseStake || !state.activeStation) return;
 
     const tag = dom.offPointTag.value.trim() || 'Punto Desfase';
-    const dx = parseFloat(dom.offDxInput.value) || 0;
-    const dy = parseFloat(dom.offDyInput.value) || 0;
+    const dx = parseMetricInput(dom.offDxInput.value, 0);
+    const dy = parseMetricInput(dom.offDyInput.value, 0);
 
     // Orientar desfase a lo largo de los vectores reales de filas y columnas del lago (U, V)
     const { uRow, uCol } = getLocalRowColVectors(baseStake);
@@ -5604,7 +5800,7 @@
     const designZ = calcResult.elevation;
     const hi = state.activeStation.hi;
 
-    let realReading = parseFloat(dom.offReadingInput.value);
+    let realReading = parseMetricInput(dom.offReadingInput.value);
     let groundZ;
     let cutFill;
 
@@ -5668,7 +5864,7 @@
 
     const findStakeAtPos = (px, py) => {
       const transform = getPondTransform();
-      const hitRadius = 24 * (window.devicePixelRatio || 1);
+      const hitRadius = 24 * getDpr();
 
       for (const stake of state.stakes) {
         const pt = transform.toPx(stake.x, stake.y);
@@ -5750,8 +5946,8 @@
         }
         renderCanvas2D();
       } else if (state.canvas.isPanning) {
-        const dx = (clientX - state.canvas.startX) * (window.devicePixelRatio || 1);
-        const dy = (clientY - state.canvas.startY) * (window.devicePixelRatio || 1);
+        const dx = (clientX - state.canvas.startX) * getDpr();
+        const dy = (clientY - state.canvas.startY) * getDpr();
         state.canvas.panX += dx;
         state.canvas.panY += dy;
         state.canvas.startX = clientX;
@@ -5770,7 +5966,7 @@
       const dist = Math.hypot(clientX - state.canvas.startX, clientY - state.canvas.startY);
 
       if (state.canvas.isDraggingStake && state.canvas.draggedStake) {
-        window.topoDB.saveStake(state.canvas.draggedStake);
+        debouncedSaveStake(state.canvas.draggedStake, 250);
         updateCalculations();
         state.canvas.isDraggingStake = false;
         state.canvas.draggedStake = null;
@@ -5882,8 +6078,8 @@
             y: (t1.clientY + t2.clientY) / 2
           };
           const dCenter = {
-            x: (curCenter.x - initialPinchCenter.x) * (window.devicePixelRatio || 1),
-            y: (curCenter.y - initialPinchCenter.y) * (window.devicePixelRatio || 1)
+            x: (curCenter.x - initialPinchCenter.x) * getDpr(),
+            y: (curCenter.y - initialPinchCenter.y) * getDpr()
           };
           state.canvas.panX = initialPan.x + dCenter.x;
           state.canvas.panY = initialPan.y + dCenter.y;

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>TopoPiscícola Pro | Nivelación de Lagos</title>
   <meta name="description" content="PWA 100% offline para topografía, nivelación de fondo de lagos piscícolas y control de pendientes hacia caja de pesca.">
 
@@ -22,7 +22,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TopoLago">
-  <link rel="apple-touch-icon" href="./icons/icon-180.png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
   <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png">
   <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="./icons/icon-512.png">
@@ -61,6 +62,13 @@
         <span class="badge-offline" id="offline-badge" title="App 100% Offline con IndexedDB">
           ⚡ 100% Offline
         </span>
+        <button id="btn-header-export-json" class="btn btn-outline btn-sm header-backup-btn" title="Exportar Copia de Seguridad (.json)" type="button">
+          📤 Copia
+        </button>
+        <button id="btn-header-import-json" class="btn btn-outline btn-sm header-backup-btn" title="Restaurar Copia (.json)" type="button">
+          📥 Restaurar
+        </button>
+        <input type="file" id="input-import-json-file" accept=".json,application/json" style="display: none;">
         <button id="btn-toggle-theme" class="icon-btn" title="Alternar Modo Sol / Noche" aria-label="Modo Sol / Noche">
           ☀️
         </button>
@@ -258,7 +266,7 @@
                   <span class="cad-val-badge" id="cad-dx-badge">0.0 m</span>
                 </div>
                 <div class="cad-input-step-row">
-                  <input type="number" id="cad-dx-input" class="form-control cad-num-input" step="0.1" value="0.0">
+                  <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="cad-dx-input" class="form-control cad-num-input" value="0.0">
                   <div class="cad-step-btns">
                     <button type="button" class="cad-step-btn" data-axis="x" data-val="-5">-5m</button>
                     <button type="button" class="cad-step-btn" data-axis="x" data-val="-1">-1m</button>
@@ -276,7 +284,7 @@
                   <span class="cad-val-badge" id="cad-dy-badge">0.0 m</span>
                 </div>
                 <div class="cad-input-step-row">
-                  <input type="number" id="cad-dy-input" class="form-control cad-num-input" step="0.1" value="0.0">
+                  <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="cad-dy-input" class="form-control cad-num-input" value="0.0">
                   <div class="cad-step-btns">
                     <button type="button" class="cad-step-btn" data-axis="y" data-val="-5">-5m</button>
                     <button type="button" class="cad-step-btn" data-axis="y" data-val="-1">-1m</button>
@@ -292,7 +300,7 @@
                 <div style="flex: 1;">
                   <label class="cad-label" for="cad-reading-input">Lectura Real de Mira (Opcional):</label>
                   <div class="input-with-unit">
-                    <input type="number" id="cad-reading-input" class="form-control cad-num-input" step="0.001" placeholder="Ej. 1.350">
+                    <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="cad-reading-input" class="form-control cad-num-input" placeholder="Ej. 1.350">
                     <span class="unit-tag">m</span>
                   </div>
                 </div>
@@ -417,7 +425,7 @@
                     </div>
                     <div class="quad-calib-field">
                       <label for="quad-calib-reading-input">Lectura V+ en Mira (m):</label>
-                      <input type="number" id="quad-calib-reading-input" class="form-control form-control-sm" step="0.001" placeholder="Ej. 1.750">
+                      <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="quad-calib-reading-input" class="form-control form-control-sm" placeholder="Ej. 1.750">
                     </div>
                     <div class="quad-calib-field">
                       <label for="quad-calib-angle-input">Ángulo Vert. Teodolito:</label>
@@ -479,14 +487,14 @@
                     <div class="quad-coord-box">
                       <label for="quad-inp-dx">dX (sobre base):</label>
                       <div class="input-with-unit">
-                        <input type="number" id="quad-inp-dx" class="form-control form-control-sm" step="0.05" value="0.00">
+                        <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="quad-inp-dx" class="form-control form-control-sm" value="0.00">
                         <span class="unit-tag">m</span>
                       </div>
                     </div>
                     <div class="quad-coord-box">
                       <label for="quad-inp-dy">dY (sobre altura):</label>
                       <div class="input-with-unit">
-                        <input type="number" id="quad-inp-dy" class="form-control form-control-sm" step="0.05" value="0.00">
+                        <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="quad-inp-dy" class="form-control form-control-sm" value="0.00">
                         <span class="unit-tag">m</span>
                       </div>
                     </div>
@@ -506,7 +514,7 @@
                   <div class="quad-eval-input-group">
                     <label for="quad-actual-reading">Lectura Real vista en Teodolito:</label>
                     <div class="input-with-unit">
-                      <input type="number" id="quad-actual-reading" class="form-control" step="0.001" placeholder="Ej. 1.690">
+                      <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="quad-actual-reading" class="form-control" placeholder="Ej. 1.690">
                       <span class="unit-tag">m</span>
                     </div>
                   </div>
@@ -1640,7 +1648,10 @@
               📥 Descargar Cartera Completa en CSV (Excel)
             </button>
             <button id="btn-export-json-backup" class="btn btn-outline btn-block">
-              💾 Respaldar Proyecto Completo en JSON
+              💾 Exportar Copia de Respaldo (.json)
+            </button>
+            <button id="btn-import-json-backup" class="btn btn-outline btn-block" type="button">
+              📥 Importar Copia de Respaldo (.json)
             </button>
           </div>
         </div>
@@ -1940,7 +1951,7 @@
             <label class="form-label" for="off-dx-input" style="font-size: 0.8rem;">
               Desfase Horizontal (dX en m):
             </label>
-            <input type="number" id="off-dx-input" class="form-control" step="0.1" value="0.0" style="min-height: 42px; font-family: var(--font-mono); font-weight: 800;">
+            <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="off-dx-input" class="form-control" value="0.0" style="min-height: 42px; font-family: var(--font-mono); font-weight: 800;">
             <div class="offset-step-row">
               <button class="offset-step-btn" data-axis="x" data-val="-5">-5m</button>
               <button class="offset-step-btn" data-axis="x" data-val="-1">-1m</button>
@@ -1955,7 +1966,7 @@
             <label class="form-label" for="off-dy-input" style="font-size: 0.8rem;">
               Desfase Vertical (dY en m):
             </label>
-            <input type="number" id="off-dy-input" class="form-control" step="0.1" value="0.0" style="min-height: 42px; font-family: var(--font-mono); font-weight: 800;">
+            <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="off-dy-input" class="form-control" value="0.0" style="min-height: 42px; font-family: var(--font-mono); font-weight: 800;">
             <div class="offset-step-row">
               <button class="offset-step-btn" data-axis="y" data-val="-5">-5m</button>
               <button class="offset-step-btn" data-axis="y" data-val="-1">-1m</button>
@@ -1992,7 +2003,7 @@
           <div class="form-grid-2" style="margin-bottom: 6px;">
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="off-reading-input" style="font-size: 0.78rem;">Lectura Real Mira VI (m):</label>
-              <input type="number" id="off-reading-input" class="form-control" step="0.001" placeholder="Ej. 1.435" style="min-height: 44px; font-size: 1.15rem; font-family: var(--font-mono); font-weight: 900;">
+              <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="off-reading-input" class="form-control" placeholder="Ej. 1.435" style="min-height: 44px; font-size: 1.15rem; font-family: var(--font-mono); font-weight: 900;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" style="font-size: 0.78rem;">Cota Terreno Resultante:</label>
@@ -2188,7 +2199,7 @@
 
         <div class="form-group">
           <label class="form-label" for="ed-input-elevation">Nueva Cota Diseño (m):</label>
-          <input type="number" id="ed-input-elevation" class="form-control" step="0.001">
+          <input type="text" inputmode="decimal" pattern="[0-9.,-]*" id="ed-input-elevation" class="form-control">
         </div>
 
         <div style="display: flex; gap: 8px;">

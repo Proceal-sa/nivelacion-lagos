@@ -47,9 +47,14 @@
   --font-mono: "SF Mono", "Roboto Mono", Consolas, monospace;
   --shadow-card: 0 2px 4px rgba(0,0,0,0.15);
 
-  /* Safe Area Insets adaptables a iPhone Notch / Dynamic Island y Android */
-  --safe-area-top: max(16px, calc(env(safe-area-inset-top) + 10px));
-  --safe-area-bottom: max(16px, env(safe-area-inset-bottom));
+  /* Zonas Seguras Universales para iPhone (SE, 11-15, 16/Pro Dynamic Island) y Android */
+  --safe-top: max(12px, env(safe-area-inset-top, 0px));
+  --safe-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  --safe-left: max(12px, env(safe-area-inset-left, 0px));
+  --safe-right: max(12px, env(safe-area-inset-right, 0px));
+
+  --safe-area-top: max(16px, calc(var(--safe-top) + 8px));
+  --safe-area-bottom: max(16px, var(--safe-bottom));
 }
 
 /* Modo Noche / Sombra */
@@ -105,6 +110,9 @@ html, body {
   width: 100%;
   height: 100%;
   overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
   font-family: var(--font-family);
   background-color: var(--bg-main);
   color: var(--text-main);
@@ -2026,17 +2034,18 @@ body.map-fullscreen-active {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: calc(6px + env(safe-area-inset-top)) 10px 8px 10px;
+  padding: calc(6px + var(--safe-top)) calc(10px + var(--safe-right)) 8px calc(10px + var(--safe-left));
   background: #0f172a;
   border-bottom: 1.5px solid #1e293b;
   z-index: 15;
 }
 
 .quad-nav-btn {
-  font-size: 0.78rem !important;
+  font-size: 0.8rem !important;
   font-weight: 800 !important;
-  padding: 5px 12px !important;
-  min-height: 36px !important;
+  padding: 6px 12px !important;
+  min-height: 44px !important;
+  min-width: 44px !important;
   border-radius: 8px !important;
   white-space: nowrap;
   color: #ffffff !important;
@@ -2047,6 +2056,8 @@ body.map-fullscreen-active {
   align-items: center;
   justify-content: center;
   gap: 4px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .quad-nav-btn:hover,
@@ -2074,12 +2085,18 @@ body.map-fullscreen-active {
   background: #1e293b;
   border: 1.5px solid #334155;
   color: #f8fafc;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 900;
-  padding: 5px 9px;
-  border-radius: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
   cursor: pointer;
-  min-height: 34px;
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .quad-arrow-btn:active {
@@ -2091,8 +2108,9 @@ body.map-fullscreen-active {
   color: #f8fafc !important;
   border: 1.5px solid #38bdf8 !important;
   font-weight: 800;
-  font-size: 0.8rem;
-  padding: 6px 10px;
+  font-size: 16px !important;
+  padding: 8px 10px;
+  min-height: 44px;
   border-radius: 8px;
   flex: 1;
   max-width: 240px;
@@ -2106,25 +2124,57 @@ body.map-fullscreen-active {
   color: #f8fafc;
 }
 
-/* Pantalla Dividida (Split Screen) */
+/* Pantalla Dividida (Split Screen) Adaptable para iPhone 16 y Retina 3x */
 .quad-split-body {
   flex: 1;
   display: flex;
-  flex-direction: column;
   overflow: hidden;
 }
 
-@media (min-width: 769px) {
+/* Vertical en iPhone / Móvil: 50% Canvas arriba / 50% Panel abajo */
+@media (orientation: portrait), (max-width: 768px) and (orientation: portrait) {
+  .quad-split-body {
+    flex-direction: column;
+  }
+  .quad-zone-canvas {
+    flex: 0 0 50%;
+    height: 50%;
+    min-height: 50%;
+    max-height: 50%;
+    border-bottom: 2px solid #1e293b;
+    border-right: none;
+  }
+  .quad-zone-controls {
+    flex: 0 0 50%;
+    height: 50%;
+    min-height: 50%;
+    max-height: 50%;
+  }
+}
+
+/* Horizontal / Landscape en iPhone y pantallas amplias: Split Izquierda Canvas / Derecha Panel */
+@media (orientation: landscape), (min-width: 769px) {
   .quad-split-body {
     flex-direction: row;
+  }
+  .quad-zone-canvas {
+    flex: 1.25;
+    height: 100%;
+    min-height: 100%;
+    max-height: 100%;
+    border-bottom: none;
+    border-right: 2px solid #1e293b;
+  }
+  .quad-zone-controls {
+    flex: 1;
+    height: 100%;
+    min-height: 100%;
+    max-height: 100%;
   }
 }
 
 /* ZONA 1: Lienzo Interactivo del Cuadro en Grande */
 .quad-zone-canvas {
-  flex: 1;
-  min-height: 42vh;
-  max-height: 50vh;
   position: relative;
   background: #020617;
   display: flex;
@@ -2132,22 +2182,19 @@ body.map-fullscreen-active {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-bottom: 2px solid #1e293b;
-}
-
-@media (min-width: 769px) {
-  .quad-zone-canvas {
-    max-height: 100%;
-    flex: 1.25;
-    border-bottom: none;
-    border-right: 2px solid #1e293b;
-  }
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #quad-canvas {
   width: 100%;
   height: 100%;
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
   display: block;
 }
 
@@ -2191,15 +2238,14 @@ body.map-fullscreen-active {
 
 /* ZONA 2: Panel Fijo con D-Pad y Visor de Teodolito */
 .quad-zone-controls {
-  flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 10px 12px;
+  touch-action: pan-y;
+  padding: 10px calc(12px + var(--safe-right)) calc(14px + var(--safe-bottom)) calc(12px + var(--safe-left));
   background: #0b0f19;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-bottom: calc(14px + env(safe-area-inset-bottom));
 }
 
 .quad-theodolite-card {
@@ -2436,11 +2482,18 @@ body.map-fullscreen-active {
   background: #1f2937;
   border: 1px solid #374151;
   color: #e2e8f0;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 800;
-  padding: 2px 7px;
-  border-radius: 6px;
+  padding: 4px 10px;
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .quad-step-choice.active {
@@ -2471,7 +2524,9 @@ body.map-fullscreen-active {
 
 .dpad-btn {
   width: 52px;
-  height: 48px;
+  height: 50px;
+  min-width: 48px;
+  min-height: 48px;
   background: #1f2937;
   border: 1.5px solid #374151;
   border-radius: 10px;
@@ -2483,7 +2538,9 @@ body.map-fullscreen-active {
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
   font-weight: 800;
   font-size: 1rem;
 }
@@ -2551,7 +2608,7 @@ body.map-fullscreen-active {
   border: 1px solid #1f2937;
 }
 
-/* Card Evaluación Terreno vs Rasante */
+/* Card Evaluación Terreno vs Rasante con Elevación Suave ante Teclado */
 .quad-eval-card {
   background: #111827;
   border-radius: 12px;
@@ -2560,6 +2617,8 @@ body.map-fullscreen-active {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  will-change: transform;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .quad-eval-grid {
@@ -2593,22 +2652,26 @@ body.map-fullscreen-active {
 
 .quad-save-btn {
   flex: 1;
-  min-height: 42px;
-  font-size: 0.82rem;
+  min-height: 48px;
+  font-size: 0.85rem;
   font-weight: 800;
   border-radius: 8px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .quad-exit-btn {
   flex: 1;
-  min-height: 42px;
-  font-size: 0.82rem;
+  min-height: 48px;
+  font-size: 0.85rem;
   font-weight: 800;
   border-radius: 8px;
   color: #ffffff !important;
   background: #1e293b !important;
   border: 1.5px solid #475569 !important;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .quad-exit-btn:hover,
@@ -2623,12 +2686,57 @@ body.map-fullscreen-active {
   border-color: #38bdf8 !important;
 }
 
+/* Botones de Respaldo en Cabecera */
+.header-backup-btn {
+  font-size: 0.76rem !important;
+  font-weight: 800 !important;
+  padding: 4px 8px !important;
+  min-height: 44px !important;
+  min-width: 44px !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.4) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.header-backup-btn:active {
+  background: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Animación Acelerada por GPU para Modales y Hojas Inferiores */
+@keyframes slide-up {
+  from {
+    transform: translate3d(0, 100%, 0);
+    opacity: 0;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+/* Prevención Global de Auto-Zoom en iPhone iOS Safari (font-size >= 16px) */
+input[type="text"],
+input[type="number"],
+input[type="tel"],
+select,
+textarea {
+  font-size: 16px !important;
+}
+
 /* ==========================================================================
    ESTILOS DE ALTO CONTRASTE PARA INPUTS Y SELECTS EN VISTA DE CUADRANTE
    ========================================================================== */
 .quad-focused-container input[type="number"],
 .quad-focused-container input[type="text"],
 .quad-focused-container select {
+  font-size: 16px !important;
   background: #0f172a !important;
   color: #f8fafc !important;
   border: 1px solid #334155 !important;

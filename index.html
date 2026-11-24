@@ -307,7 +307,7 @@
               <div class="form-group">
                 <label class="form-label" for="seed-xa1">Retiro X de A1 al Eje Y (x_A1):</label>
                 <div class="input-with-unit">
-                  <input type="number" id="seed-xa1" class="form-control" step="0.1" value="1.0" placeholder="Ej. 1.0">
+                  <input type="number" id="seed-xa1" class="form-control" step="0.1" value="1.5" placeholder="Ej. 1.5">
                   <span class="unit-tag">m</span>
                 </div>
                 <div class="form-help">Distancia horizontal desde el borde izquierdo (X=0)</div>
@@ -315,7 +315,7 @@
               <div class="form-group">
                 <label class="form-label" for="seed-ya1">Retiro Y de A1 al Eje X (y_A1):</label>
                 <div class="input-with-unit">
-                  <input type="number" id="seed-ya1" class="form-control" step="0.1" value="2.0" placeholder="Ej. 2.0">
+                  <input type="number" id="seed-ya1" class="form-control" step="0.1" value="1.5" placeholder="Ej. 1.5">
                   <span class="unit-tag">m</span>
                 </div>
                 <div class="form-help">Distancia vertical desde el borde frontal (Y=0)</div>
@@ -324,28 +324,25 @@
 
             <!-- 3. Giro global respecto a los Ejes X y Y -->
             <label class="form-label" style="font-size: 0.88rem; color: #b45309; font-weight: 700;">
-              ③ Orientación del Rombo al Terreno (1 Medida de Cinta al Borde):
+              ③ Orientación del Rombo al Terreno:
             </label>
             <div class="view-mode-bar" style="margin-bottom: 8px;">
-              <button type="button" id="seed-ref-xb1-btn" class="view-mode-btn active" data-ref="y_axis_xB1">
-                <span>Opción 1: Retiro x_B1 a Eje Y</span>
+              <button type="button" id="seed-ref-talud-btn" class="view-mode-btn active" data-ref="talud_paralelo">
+                <span>Modo 1: Taludes Paralelos a la Malla (Por Defecto)</span>
               </button>
-              <button type="button" id="seed-ref-ya2-btn" class="view-mode-btn" data-ref="x_axis_yA2">
-                <span>Opción 2: Retiro y_A2 a Eje X</span>
-              </button>
-              <button type="button" id="seed-ref-both-btn" class="view-mode-btn" data-ref="both_retires">
-                <span>Opción 3: Ambos Retiros</span>
+              <button type="button" id="seed-ref-ortogonal-btn" class="view-mode-btn" data-ref="ejes_ortogonales">
+                <span>Modo 2: Ejes X/Y a 90° con Giro (x_B1 a Eje Y)</span>
               </button>
             </div>
 
             <div class="form-grid-2" style="margin-bottom: 10px;">
-              <div class="form-group" id="seed-grp-xb1">
+              <div class="form-group" id="seed-grp-xb1" style="display: none;">
                 <label class="form-label" for="seed-xb1">Retiro de B1 a Eje Y (x_B1):</label>
                 <div class="input-with-unit">
                   <input type="number" id="seed-xb1" class="form-control" step="0.1" value="1.5" placeholder="Ej. 1.5">
                   <span class="unit-tag">m</span>
                 </div>
-                <div class="form-help">Fija el ángulo real de las letras theta_V</div>
+                <div class="form-help">Fija el ángulo real de las letras respecto al Eje Y ortogonal</div>
               </div>
               <div class="form-group" id="seed-grp-ya2" style="display: none;">
                 <label class="form-label" for="seed-ya2">Retiro de A2 a Eje X (y_A2):</label>

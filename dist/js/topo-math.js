@@ -624,16 +624,23 @@ const TopoMath = {
    *    Ux = d_col * Math.cos(theta_U), Uy = d_col * Math.sin(theta_U)
    *    Vx = d_fila * Math.cos(theta_V), Vy = d_fila * Math.sin(theta_V)
    */
+  /**
+   * Resuelve el Cuadro Semilla (A1, A2, B1, B2) con trigonometría exacta de campo.
+   * - Entrada: d_col (A1->A2), d_fila (A1->B1), d_corta (A2->B1), d_larga (A1->B2)
+   * - alpha: ángulo interno exacto por ley de cosenos (74.69° con 15m, 18.20m y 23.85m)
+   * - Modo 1 (Talud Base Paralelo - Por defecto): theta_U = 0°, theta_V = alpha (74.69°)
+   * - Modo 2 (Ejes Ortogonales a 90°): Vx = x_B1 - x_A1, theta_V = atan2(Vy, Vx), theta_U = theta_V - alpha (+15.31° hacia arriba)
+   */
   solveSeedFrameVectorial(params) {
     const dCol = Number(params.dCol || params.dx || 15.0);
     const dFila = Number(params.dFila || params.dy || 15.0);
-    const d1 = Number(params.d1 !== undefined ? params.d1 : (params.seedD1 !== undefined ? params.seedD1 : 23.85));
-    const d2 = Number(params.d2 !== undefined ? params.d2 : (params.seedD2 !== undefined ? params.seedD2 : 18.20));
-    const xA1 = Number(params.xA1 !== undefined ? params.xA1 : (params.seedXA1 !== undefined ? params.seedXA1 : 1.0));
-    const yA1 = Number(params.yA1 !== undefined ? params.yA1 : (params.seedYA1 !== undefined ? params.seedYA1 : 2.0));
-    const refMode = params.refMode || params.seedRefMode || 'y_axis_xB1';
+    const d1 = Number(params.d1 !== undefined ? params.d1 : (params.seedD1 !== undefined ? params.seedD1 : 23.85)); // diagonal larga A1->B2
+    const d2 = Number(params.d2 !== undefined ? params.d2 : (params.seedD2 !== undefined ? params.seedD2 : 18.20)); // diagonal corta A2->B1
+    const xA1 = Number(params.xA1 !== undefined ? params.xA1 : (params.seedXA1 !== undefined ? params.seedXA1 : 1.5));
+    const yA1 = Number(params.yA1 !== undefined ? params.yA1 : (params.seedYA1 !== undefined ? params.seedYA1 : 1.5));
+    const refMode = params.refMode || params.seedRefMode || 'talud_paralelo'; // 'talud_paralelo' (Modo 1) | 'ejes_ortogonales' (Modo 2)
     const xB1 = Number(params.xB1 !== undefined ? params.xB1 : (params.seedXB1 !== undefined ? params.seedXB1 : 1.5));
-    const yA2 = Number(params.yA2 !== undefined ? params.yA2 : (params.seedYA2 !== undefined ? params.seedYA2 : 5.48));
+    const yA2 = Number(params.yA2 !== undefined ? params.yA2 : (params.seedYA2 !== undefined ? params.seedYA2 : 1.5));
 
     if (dCol <= 0 || dFila <= 0) {
       return { success: false, error: 'd_col y d_fila deben ser mayores a cero' };
@@ -641,55 +648,51 @@ const TopoMath = {
 
     const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-    let alpha = 0;
-    let cos1 = 0;
-    let cos2 = 0;
-    let thetaV = 0;
+    // 1. Cálculo del ángulo interno del rombo (alpha en A1):
+    // Triángulo A1-A2-B1 cerrado por diagonal corta d2 (18.20 m):
+    const cosAlpha1 = (dCol * dCol + dFila * dFila - d2 * d2) / (2 * dCol * dFila);
+    // Y verifica/promedia con B2 cerrado por diagonal larga d1 (23.85 m):
+    const cosAlpha2 = (d1 * d1 - dCol * dCol - dFila * dFila) / (2 * dCol * dFila);
+
+    const cosAvg = clamp((cosAlpha1 + cosAlpha2) / 2, -0.999, 0.999);
+    const alpha = Math.acos(cosAvg); // Para 15, 18.2, 23.85 da exactamente 74.69° (cosAvg = +0.264)
+    const alphaDeg = alpha * 180 / Math.PI;
+
+    // Discrepancia entre diagonales
+    const calcD1 = Math.sqrt(Math.max(0, dCol * dCol + dFila * dFila + 2 * dCol * dFila * cosAlpha1));
+    const closureErrorM = Math.abs(d1 - calcD1);
+
     let thetaU = 0;
-    let closureErrorM = 0;
+    let thetaV = 0;
 
-    if (refMode === 'both_retires' && (d1 <= 0 || d2 <= 0)) {
-      // Opción 3: Ambos retiros sin diagonales directas
-      const dyU = yA2 - yA1;
-      const sinU = clamp(dyU / dCol, -0.999, 0.999);
-      thetaU = Math.asin(sinU);
-
-      const dxV = xB1 - xA1;
-      const dyV = Math.sqrt(Math.max(0, dFila * dFila - dxV * dxV));
-      thetaV = Math.atan2(dyV, dxV);
-
-      alpha = thetaV - thetaU;
-      cos1 = Math.cos(alpha);
-      cos2 = Math.cos(alpha);
+    if (refMode === 'ejes_ortogonales' || refMode === 'y_axis_xB1') {
+      // Modo 2: Ejes X/Y ortogonales a 90° con giro
+      // Si x_B1 se mide contra un Eje Y vertical de 90°:
+      const Vx_diff = xB1 - xA1;
+      const Vy_calc = Math.sqrt(Math.max(0, dFila * dFila - Vx_diff * Vx_diff));
+      thetaV = Math.atan2(Vy_calc, Vx_diff); // ~90° o 88°
+      thetaU = thetaV - alpha; // (+15.31° hacia ARRIBA en Y positivo, ¡NUNCA cayendo hacia abajo ni metiendo C1/D1 en X negativo!)
+    } else if (refMode === 'x_axis_yA2') {
+      const Uy_diff = yA2 - yA1;
+      const Ux_calc = Math.sqrt(Math.max(0, dCol * dCol - Uy_diff * Uy_diff));
+      thetaU = Math.atan2(Uy_diff, Ux_calc);
+      thetaV = thetaU + alpha;
+    } else if (refMode === 'both_retires') {
+      const Uy_diff = yA2 - yA1;
+      const Ux_calc = Math.sqrt(Math.max(0, dCol * dCol - Uy_diff * Uy_diff));
+      thetaU = Math.atan2(Uy_diff, Ux_calc);
+      const Vx_diff = xB1 - xA1;
+      const Vy_calc = Math.sqrt(Math.max(0, dFila * dFila - Vx_diff * Vx_diff));
+      thetaV = Math.atan2(Vy_calc, Vx_diff);
     } else {
-      // 1. Ángulo interno exacto por las 2 Diagonales (alpha)
-      cos1 = (d1 * d1 - dCol * dCol - dFila * dFila) / (2 * dCol * dFila);
-      cos2 = (dCol * dCol + dFila * dFila - d2 * d2) / (2 * dCol * dFila);
-
-      const cosAvg = clamp((cos1 + cos2) / 2, -0.999, 0.999);
-      alpha = Math.acos(cosAvg);
-
-      // Chequeo de consistencia de cierre con cinta entre diagonales
-      const calcD1 = Math.sqrt(Math.max(0, dCol * dCol + dFila * dFila + 2 * dCol * dFila * cos2));
-      closureErrorM = Math.abs(d1 - calcD1);
-
-      // 2. Giro global respecto a los Ejes X y Y (sin bloquear Uy = 0)
-      if (refMode === 'x_axis_yA2') {
-        // Opción 2: Referencia al Eje X con y_A2
-        const dyU = yA2 - yA1;
-        const sinU = clamp(dyU / dCol, -0.999, 0.999);
-        thetaU = Math.asin(sinU);
-        thetaV = thetaU + alpha;
-      } else {
-        // Opción 1: Referencia al Eje Y con x_B1 (predeterminada)
-        const dxV = xB1 - xA1;
-        const dyV = Math.sqrt(Math.max(0, dFila * dFila - dxV * dxV));
-        thetaV = Math.atan2(dyV, dxV);
-        thetaU = thetaV - alpha;
-      }
+      // Modo 1 (Taludes paralelos a la malla a 1.5m - Por defecto):
+      // El Talud Base (Eje X) va paralelo a A1->A2 (theta_U = 0°, todas las A a 1.5m del talud largo)
+      // y el Talud Lateral (también inclinado a 74.69°) va paralelo a A1->G1:
+      thetaU = 0;
+      thetaV = alpha; // 74.69°
     }
 
-    // 3. Vectores inclinados U y V (¡Uy jamás queda bloqueado en 0!)
+    // 3. Vectores inclinados U y V en el plano cartesiano topográfico
     const Ux = dCol * Math.cos(thetaU);
     const Uy = dCol * Math.sin(thetaU);
     const Vx = dFila * Math.cos(thetaV);
@@ -701,12 +704,12 @@ const TopoMath = {
     const B1 = { x: xA1 + Vx, y: yA1 + Vy };
     const B2 = { x: xA1 + Ux + Vx, y: yA1 + Uy + Vy };
 
-    const alphaDeg = alpha * 180 / Math.PI;
     const thetaUDeg = thetaU * 180 / Math.PI;
     const thetaVDeg = thetaV * 180 / Math.PI;
 
     return {
       success: true,
+      refMode,
       dCol,
       dFila,
       d1,
@@ -721,8 +724,10 @@ const TopoMath = {
       thetaUDeg: Math.round(thetaUDeg * 100) / 100,
       thetaV,
       thetaVDeg: Math.round(thetaVDeg * 100) / 100,
-      cos1,
-      cos2,
+      cosAlpha1: Math.round(cosAlpha1 * 1000) / 1000,
+      cosAlpha2: Math.round(cosAlpha2 * 1000) / 1000,
+      cos1: Math.round(cosAlpha2 * 1000) / 1000,
+      cos2: Math.round(cosAlpha1 * 1000) / 1000,
       closureErrorMeters: Math.round(closureErrorM * 1000) / 1000,
       closureErrorCm: Math.round(closureErrorM * 1000) / 10,
       Ux: Math.round(Ux * 1000) / 1000,
@@ -746,13 +751,15 @@ const TopoMath = {
   generateSeedFrameMesh(projId, seedFrame, settings) {
     const { Ux, Uy, Vx, Vy, xA1, yA1 } = seedFrame;
 
-    const rowCounts = settings.rowPattern
-      ? settings.rowPattern.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+    // Si está en modo seed, usar seedRowPattern si existe; si no, usar seedRows (7) y seedCols (10)
+    const patternStr = (settings.meshMode === 'seed' ? settings.seedRowPattern : settings.rowPattern) || '';
+    const rowCounts = patternStr.trim()
+      ? patternStr.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
       : [];
 
-    const numRows = rowCounts.length > 0 ? rowCounts.length : (settings.rows || 7);
-    const maxCols = rowCounts.length > 0 ? Math.max(...rowCounts) : (settings.cols || 10);
-    const alignment = settings.rowAlignment || 'center'; // 'center', 'left', 'right'
+    const numRows = rowCounts.length > 0 ? rowCounts.length : Number(settings.seedRows || settings.rows || 7);
+    const maxCols = rowCounts.length > 0 ? Math.max(...rowCounts) : Number(settings.seedCols || settings.cols || 10);
+    const alignment = settings.seedAlignment || settings.rowAlignment || 'center'; // 'center', 'left', 'right'
 
     const stakes = [];
 

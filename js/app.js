@@ -20,7 +20,7 @@
     activeViewMode: '2d', // '2d' | 'table'
     isEditMode: false,
     configMode: 'seed', // 'seed' | 'tape' | 'regular' | 'talud'
-    seedRefMode: 'y_axis_xB1', // 'y_axis_xB1' | 'x_axis_yA2' | 'both_retires'
+    seedRefMode: 'talud_paralelo', // 'talud_paralelo' | 'ejes_ortogonales' | 'y_axis_xB1' | 'x_axis_yA2' | 'both_retires'
     seedAlignment: 'center',
     tapeAlignment: 'center', // 'center' | 'left' | 'right'
     boxMode: 'stake', // 'stake' | 'tape'
@@ -106,6 +106,8 @@
     dom.seedD2 = document.getElementById('seed-d2');
     dom.seedXA1 = document.getElementById('seed-xa1');
     dom.seedYA1 = document.getElementById('seed-ya1');
+    dom.seedRefTaludBtn = document.getElementById('seed-ref-talud-btn');
+    dom.seedRefOrtogonalBtn = document.getElementById('seed-ref-ortogonal-btn');
     dom.seedRefXb1Btn = document.getElementById('seed-ref-xb1-btn');
     dom.seedRefYa2Btn = document.getElementById('seed-ref-ya2-btn');
     dom.seedRefBothBtn = document.getElementById('seed-ref-both-btn');
@@ -399,9 +401,9 @@
         seedDFila: 15.0,
         seedD1: 23.85,
         seedD2: 18.20,
-        seedXA1: 1.0,
-        seedYA1: 2.0,
-        seedRefMode: 'y_axis_xB1',
+        seedXA1: 1.5,
+        seedYA1: 1.5,
+        seedRefMode: 'talud_paralelo',
         seedXB1: 1.5,
         seedYA2: 5.48,
         seedRows: 7,
@@ -794,21 +796,26 @@
     const spanX = Math.max(10, tMaxX - tMinX);
     const spanY = Math.max(10, tMaxY - tMinY);
     const padding = 50 * (window.devicePixelRatio || 1);
-    const availW = (canvas ? canvas.width : 800) - padding * 2;
-    const availH = (canvas ? canvas.height : 500) - padding * 2;
+    const canvasW = canvas && canvas.width ? canvas.width : 800;
+    const canvasH = canvas && canvas.height ? canvas.height : 500;
+    const availW = canvasW - padding * 2;
+    const availH = canvasH - padding * 2;
     const scale = Math.min(availW / spanX, availH / spanY) * state.canvas.zoom;
 
+    // En un plano cartesiano topográfico real:
+    // X crece hacia la DERECHA
+    // Y crece hacia ARRIBA (invertir coordenada vertical en pantalla para que 0,0 esté abajo a la izquierda)
     const toPx = (x, y) => {
       const t = toTransformed(x, y);
       return {
         x: padding + state.canvas.panX + (t.x - tMinX) * scale,
-        y: padding + state.canvas.panY + (t.y - tMinY) * scale
+        y: canvasH - padding + state.canvas.panY - (t.y - tMinY) * scale
       };
     };
 
     const fromPx = (px, py) => {
       const tx = tMinX + (px - padding - state.canvas.panX) / scale;
-      const ty = tMinY + (py - padding - state.canvas.panY) / scale;
+      const ty = tMinY + (canvasH - padding + state.canvas.panY - py) / scale;
       return fromTransformed(tx, ty);
     };
 
@@ -1126,6 +1133,41 @@
         ctx.textBaseline = 'middle';
         ctx.fillText(`Fila A inclinada: ΔY = +${(lastA.y - firstA.y).toFixed(2)}m (θU = ${thetaUDeg >= 0 ? '+' : ''}${thetaUDeg.toFixed(1)}°)`, pLast.x + 10, pLast.y);
       }
+
+      // 1.4 Si está en Modo 1 (Taludes Paralelos a la Malla): Dibujar ambos bordes de talud a 1.5m
+      if (!sf.refMode || sf.refMode === 'talud_paralelo') {
+        const dpr = window.devicePixelRatio || 1;
+        ctx.strokeStyle = isDark ? '#38bdf8' : '#0284c7';
+        ctx.lineWidth = 2.5;
+
+        // Talud Base: corre por Y = 0 (paralelo a la Fila A que está a yA1)
+        const pTaludBase0 = transform.toPx(0, 0);
+        const pTaludBase1 = transform.toPx(transform.maxX, 0);
+        ctx.beginPath();
+        ctx.moveTo(pTaludBase0.x, pTaludBase0.y);
+        ctx.lineTo(pTaludBase1.x, pTaludBase1.y);
+        ctx.stroke();
+
+        ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
+        ctx.fillStyle = isDark ? '#38bdf8' : '#0284c7';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`Talud Base (Borde Largo a ${yA1.toFixed(1)}m)`, pTaludBase1.x - 10, pTaludBase1.y - 6);
+
+        // Talud Lateral: corre con inclinación alpha = 74.69° paralelo a la Columna 1 (A1->G1)
+        const yTop = transform.maxY;
+        const xTop = yTop / Math.tan(sf.alpha);
+        const pTaludLat0 = transform.toPx(0, 0);
+        const pTaludLat1 = transform.toPx(xTop, yTop);
+        ctx.beginPath();
+        ctx.moveTo(pTaludLat0.x, pTaludLat0.y);
+        ctx.lineTo(pTaludLat1.x, pTaludLat1.y);
+        ctx.stroke();
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`Talud Lateral (Ancho inclinado ${sf.alphaDeg.toFixed(1)}° a ${xA1.toFixed(1)}m)`, pTaludLat1.x + 8, pTaludLat1.y - 6);
+      }
     }
 
     // 1.5 Dibujar Cuadrilátero Exterior con Cinta (si existe en modo tape)
@@ -1253,9 +1295,11 @@
       });
     }
 
-    // 4. Dibujar Nodos de Estacas
-    const nodeRadius = 14 * (window.devicePixelRatio || 1);
+    // 4. Dibujar Nodos de Estacas (Puntos Limpios y Proporcionados 5px-7px)
+    const dpr = window.devicePixelRatio || 1;
+    const nodeRadius = Math.round(5.5 * dpr);
     const tolMeters = (state.project.settings.toleranceCm || 2.0) / 100;
+    const showSecondary = (state.canvas.zoom >= 1.6) || state.isEditMode;
 
     state.stakes.forEach(stake => {
       const pt = transform.toPx(stake.x, stake.y);
@@ -1263,50 +1307,41 @@
       const isCaja = (boxStake && stake.id === boxStake.id);
       const isHovered = (state.canvas.hoveredStake && state.canvas.hoveredStake.id === stake.id);
 
-      let fillColor = '#ffffff';
-      let strokeColor = '#000000';
-      let textColor = '#000000';
+      let fillColor = isDark ? '#1e293b' : '#ffffff';
+      let strokeColor = isDark ? '#94a3b8' : '#475569';
 
       if (isCaja) {
         fillColor = '#f59e0b';
         strokeColor = '#b45309';
-        textColor = '#78350f';
-      } else if (stake.reading === null || stake.reading === undefined) {
-        fillColor = isDark ? '#1e293b' : '#ffffff';
-        strokeColor = isDark ? '#94a3b8' : '#334155';
-        textColor = isDark ? '#f8fafc' : '#000000';
-      } else {
+      } else if (stake.reading !== null && stake.reading !== undefined) {
         const evalRes = window.TopoMath.evaluateStatus(stake.cutFill, tolMeters);
         if (evalRes.status === 'A_NIVEL') {
           fillColor = '#16a34a';
           strokeColor = '#14532d';
-          textColor = '#ffffff';
         } else if (evalRes.status === 'CORTE') {
           fillColor = '#dc2626';
           strokeColor = '#7f1d1d';
-          textColor = '#ffffff';
         } else {
           fillColor = '#0284c7';
           strokeColor = '#075985';
-          textColor = '#ffffff';
         }
       }
 
       // Anillo de modo replanteo
       if (state.isEditMode) {
         ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
-        ctx.arc(px, py, nodeRadius + 5, 0, Math.PI * 2);
+        ctx.arc(px, py, nodeRadius + 4, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]);
       }
 
-      // Círculo del nodo
+      // Círculo del punto limpio y proporcionado (5px–7px)
       ctx.fillStyle = fillColor;
       ctx.strokeStyle = isHovered ? '#00ff88' : strokeColor;
-      ctx.lineWidth = isHovered ? 4 : 2.5;
+      ctx.lineWidth = isHovered ? 3 : 1.5;
 
       ctx.beginPath();
       ctx.arc(px, py, nodeRadius, 0, Math.PI * 2);
@@ -1317,30 +1352,34 @@
       if (stake.hasPuddleWarning) {
         ctx.fillStyle = '#dc2626';
         ctx.beginPath();
-        ctx.arc(px + nodeRadius * 0.7, py - nodeRadius * 0.7, 7 * (window.devicePixelRatio || 1), 0, Math.PI * 2);
+        ctx.arc(px + nodeRadius + 2, py - nodeRadius, 4.5 * dpr, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${9 * (window.devicePixelRatio || 1)}px sans-serif`;
+        ctx.font = `bold ${7 * dpr}px sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText('!', px + nodeRadius * 0.7, py - nodeRadius * 0.7 + 3);
+        ctx.textBaseline = 'middle';
+        ctx.fillText('!', px + nodeRadius + 2, py - nodeRadius);
       }
 
-      // Texto de Código de Estaca
-      ctx.fillStyle = textColor;
-      ctx.font = `bold ${Math.max(10, 11 * (window.devicePixelRatio || 1))}px sans-serif`;
-      ctx.textAlign = 'center';
+      // Texto de Código de Estaca (etiqueta A1 pequeña y clara al lado del punto)
+      const cleanCode = stake.code.replace('-', '');
+      ctx.fillStyle = isDark ? '#f1f5f9' : '#0f172a';
+      ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(stake.code, px, py);
+      ctx.fillText(cleanCode, px + nodeRadius + 3, py);
 
-      // Cota Rasante o Desbalance debajo de la estaca
-      let subLabel = `${stake.designElevation.toFixed(2)}`;
-      if (stake.cutFill !== null && stake.cutFill !== undefined) {
-        subLabel = `${stake.cutFill > 0 ? '+' : ''}${stake.cutFill.toFixed(2)}m`;
+      // Cota Rasante o Desbalance debajo de la estaca (ocultos hasta hacer zoom >= 1.6 o hover)
+      if (showSecondary || isHovered) {
+        let subLabel = `${stake.designElevation.toFixed(2)}`;
+        if (stake.cutFill !== null && stake.cutFill !== undefined) {
+          subLabel = `${stake.cutFill > 0 ? '+' : ''}${stake.cutFill.toFixed(2)}m`;
+        }
+
+        ctx.font = `${Math.max(8, 9 * dpr)}px monospace`;
+        ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+        ctx.fillText(subLabel, px + nodeRadius + 3, py + 10);
       }
-
-      ctx.font = `bold ${Math.max(9, 10 * (window.devicePixelRatio || 1))}px monospace`;
-      ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
-      ctx.fillText(subLabel, px, py + nodeRadius + 12);
     });
   }
 
@@ -1565,7 +1604,7 @@
     if (dom.seedCols) dom.seedCols.value = s.seedCols ?? 10;
     if (dom.seedRowPattern) dom.seedRowPattern.value = s.seedRowPattern || '';
 
-    selectSeedRefMode(s.seedRefMode || 'y_axis_xB1');
+    selectSeedRefMode(s.seedRefMode || 'talud_paralelo');
     selectSeedAlignment(s.seedAlignment || 'center');
     updateSeedFramePreview();
 
@@ -1631,14 +1670,14 @@
     const dFila = parseFloat(dom.seedDFila.value) || 15.0;
     const d1 = parseFloat(dom.seedD1.value) || 23.85;
     const d2 = parseFloat(dom.seedD2.value) || 18.20;
-    const xA1 = parseFloat(dom.seedXA1 ? dom.seedXA1.value : 1.0) || 1.0;
-    const yA1 = parseFloat(dom.seedYA1 ? dom.seedYA1.value : 2.0) || 2.0;
+    const xA1 = parseFloat(dom.seedXA1 ? dom.seedXA1.value : 1.5) || 1.5;
+    const yA1 = parseFloat(dom.seedYA1 ? dom.seedYA1.value : 1.5) || 1.5;
     const xB1 = parseFloat(dom.seedXB1 ? dom.seedXB1.value : 1.5) || 1.5;
     const yA2 = parseFloat(dom.seedYA2 ? dom.seedYA2.value : 5.48) || 5.48;
 
     const res = window.TopoMath.solveSeedFrameVectorial({
       dCol, dFila, d1, d2, xA1, yA1,
-      refMode: state.seedRefMode || 'y_axis_xB1',
+      refMode: state.seedRefMode || 'talud_paralelo',
       xB1, yA2
     });
 
@@ -1670,11 +1709,16 @@
 
   function selectSeedRefMode(refMode) {
     state.seedRefMode = refMode;
+    const isTalud = refMode === 'talud_paralelo';
+    const isOrtogonal = refMode === 'ejes_ortogonales' || refMode === 'y_axis_xB1';
+
+    if (dom.seedRefTaludBtn) dom.seedRefTaludBtn.classList.toggle('active', isTalud);
+    if (dom.seedRefOrtogonalBtn) dom.seedRefOrtogonalBtn.classList.toggle('active', isOrtogonal);
     if (dom.seedRefXb1Btn) dom.seedRefXb1Btn.classList.toggle('active', refMode === 'y_axis_xB1');
     if (dom.seedRefYa2Btn) dom.seedRefYa2Btn.classList.toggle('active', refMode === 'x_axis_yA2');
     if (dom.seedRefBothBtn) dom.seedRefBothBtn.classList.toggle('active', refMode === 'both_retires');
 
-    if (dom.seedGrpXb1) dom.seedGrpXb1.style.display = (refMode === 'y_axis_xB1' || refMode === 'both_retires') ? 'block' : 'none';
+    if (dom.seedGrpXb1) dom.seedGrpXb1.style.display = (isOrtogonal || refMode === 'both_retires') ? 'block' : 'none';
     if (dom.seedGrpYa2) dom.seedGrpYa2.style.display = (refMode === 'x_axis_yA2' || refMode === 'both_retires') ? 'block' : 'none';
 
     updateSeedFramePreview();
@@ -1878,7 +1922,7 @@
 
       const seedRes = window.TopoMath.solveSeedFrameVectorial({
         dCol, dFila, d1, d2, xA1, yA1,
-        refMode: state.seedRefMode || 'y_axis_xB1',
+        refMode: state.seedRefMode || 'talud_paralelo',
         xB1, yA2
       });
 
@@ -3207,7 +3251,9 @@
     if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.addEventListener('click', () => setConfigMode('talud'));
 
     // Entradas dinámicas modo cuadro semilla vectorial
-    if (dom.seedRefXb1Btn) dom.seedRefXb1Btn.addEventListener('click', () => selectSeedRefMode('y_axis_xB1'));
+    if (dom.seedRefTaludBtn) dom.seedRefTaludBtn.addEventListener('click', () => selectSeedRefMode('talud_paralelo'));
+    if (dom.seedRefOrtogonalBtn) dom.seedRefOrtogonalBtn.addEventListener('click', () => selectSeedRefMode('ejes_ortogonales'));
+    if (dom.seedRefXb1Btn) dom.seedRefXb1Btn.addEventListener('click', () => selectSeedRefMode('ejes_ortogonales'));
     if (dom.seedRefYa2Btn) dom.seedRefYa2Btn.addEventListener('click', () => selectSeedRefMode('x_axis_yA2'));
     if (dom.seedRefBothBtn) dom.seedRefBothBtn.addEventListener('click', () => selectSeedRefMode('both_retires'));
 

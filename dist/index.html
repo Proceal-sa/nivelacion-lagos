@@ -166,7 +166,10 @@
               <input type="checkbox" id="chk-show-flow" checked> 〰️ Flechas Drenaje
             </label>
           </div>
-          <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="btn-toggle-fullscreen-bar" class="btn btn-outline btn-sm" style="font-weight: 800; font-size: 0.78rem; padding: 2px 8px;" title="Pantalla Completa Real">
+              ⛶ Pantalla Completa
+            </button>
             <span id="canvas-view-badge" class="badge-offline" style="background: #0284c7; font-size: 0.78rem; font-weight: 700;">
               👁️ Perspectiva: 0° Normal
             </span>
@@ -175,17 +178,140 @@
 
         <!-- CONTENEDOR DE PLANO 2D ESCALA REAL (CANVAS INTERACTIVO) -->
         <div id="canvas-2d-wrapper" class="canvas-2d-container">
+          <!-- Banner flotante modo replanteo -->
           <div id="canvas-edit-banner" class="canvas-mode-banner" style="display: none;">
             <span>🛠️ MODO REPLANTEO ACTIVO: Arrastre o toque una estaca para moverla</span>
           </div>
+
+          <!-- Controles Flotantes del Canvas 2D -->
           <div class="canvas-floating-controls">
+            <button id="canvas-btn-fullscreen-toggle" class="canvas-ctrl-btn canvas-btn-fs" title="Pantalla Completa Real">⛶</button>
             <button id="canvas-btn-rot90" class="canvas-ctrl-btn" title="Rotar Vista 90° (Orientar según el nivel en campo)">🔄 90°</button>
             <button id="canvas-btn-mirror" class="canvas-ctrl-btn" title="Invertir Vista (Espejo)">🪞</button>
             <button id="canvas-btn-zoom-in" class="canvas-ctrl-btn" title="Acercar">+</button>
             <button id="canvas-btn-zoom-out" class="canvas-ctrl-btn" title="Alejar">-</button>
-            <button id="canvas-btn-center" class="canvas-ctrl-btn" title="Centrar Vista">🎯</button>
+            <button id="canvas-btn-center" class="canvas-ctrl-btn" title="Centrar Malla">🎯</button>
           </div>
+
+          <!-- ============================================================
+               HUD SUPERIOR CADENERO (BARRA FLOTANTE DE ALTO CONTRASTE)
+               ============================================================ -->
+          <div id="cadenero-top-hud" class="cadenero-top-hud" style="display: none;">
+            <div class="cadenero-top-bar">
+              <button type="button" id="cadenero-btn-back" class="btn btn-outline cad-hud-btn" title="Salir del modo cadenero">
+                ← Salir
+              </button>
+              <div class="cad-hud-title">
+                <span class="cad-hud-badge">📍 MODO CADENERO EN VIVO</span>
+                <span id="cad-hud-base-tag" class="cad-hud-subtag">Base: A-1</span>
+              </div>
+              <button type="button" id="cadenero-btn-center" class="btn btn-outline cad-hud-btn" title="Centrar en Cadenero">
+                🎯 Enfocar
+              </button>
+            </div>
+            
+            <div class="cad-ideal-banner">
+              <div class="cad-ideal-label">📢 LECTURA IDEAL DE MIRA (A RASANTE)</div>
+              <div class="cad-ideal-value" id="cad-ideal-reading-val">---.--- m</div>
+              <div class="cad-ideal-meta">
+                <span>Cota Rasante: <strong id="cad-design-elev-val" class="mono-num">100.000 m</strong></span>
+                <span>•</span>
+                <span>HI Usado: <strong id="cad-hi-val" class="mono-num">---.--- m</strong></span>
+                <span>•</span>
+                <span>Desfase: <strong id="cad-offset-summary" class="mono-num">0.0m, 0.0m</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lienzo Gráfico 2D Escala Real (TIN) -->
           <canvas id="lake-tin-canvas" class="tin-main-canvas" width="800" height="500"></canvas>
+
+          <!-- ============================================================
+               HUD INFERIOR CADENERO (PANEL FLOTANTE COMPACTO Y COLAPSABLE)
+               ============================================================ -->
+          <div id="cadenero-bottom-hud" class="cadenero-bottom-hud" style="display: none;">
+            <!-- Barra de colapso / expansión para ver 100% limpio -->
+            <div id="cadenero-hud-toggle-btn" class="cad-bottom-toggle" title="Toca para colapsar o expandir controles">
+              <div class="cad-drag-pill"></div>
+              <span id="cad-bottom-toggle-text">▼ Minimizar panel (Ver plano 100% limpio)</span>
+            </div>
+
+            <div id="cadenero-bottom-content" class="cad-bottom-content">
+              <!-- Fila 1: Estaca Base -->
+              <div class="cad-form-row">
+                <label class="cad-label" for="cad-base-stake-sel">Estaca Base de Referencia:</label>
+                <select id="cad-base-stake-sel" class="form-select cad-select">
+                  <!-- Opciones generadas dinámicamente -->
+                </select>
+              </div>
+
+              <!-- Pista interactiva de toque directo -->
+              <div class="cad-touch-hint">
+                👉 Toca o arrastra el dedo en el plano para mover la mira del cadenero
+              </div>
+
+              <!-- Fila 2: Desfase Horizontal (dX en eje de malla) -->
+              <div class="cad-axis-block">
+                <div class="cad-axis-header">
+                  <label class="cad-label" for="cad-dx-input">Desfase dX (Horizontal / Eje Columnas):</label>
+                  <span class="cad-val-badge" id="cad-dx-badge">0.0 m</span>
+                </div>
+                <div class="cad-input-step-row">
+                  <input type="number" id="cad-dx-input" class="form-control cad-num-input" step="0.1" value="0.0">
+                  <div class="cad-step-btns">
+                    <button type="button" class="cad-step-btn" data-axis="x" data-val="-5">-5m</button>
+                    <button type="button" class="cad-step-btn" data-axis="x" data-val="-1">-1m</button>
+                    <button type="button" class="cad-step-btn zero" data-axis="x" data-val="0">0</button>
+                    <button type="button" class="cad-step-btn" data-axis="x" data-val="1">+1m</button>
+                    <button type="button" class="cad-step-btn" data-axis="x" data-val="5">+5m</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fila 3: Desfase Vertical (dY en eje de malla) -->
+              <div class="cad-axis-block">
+                <div class="cad-axis-header">
+                  <label class="cad-label" for="cad-dy-input">Desfase dY (Vertical / Eje Filas):</label>
+                  <span class="cad-val-badge" id="cad-dy-badge">0.0 m</span>
+                </div>
+                <div class="cad-input-step-row">
+                  <input type="number" id="cad-dy-input" class="form-control cad-num-input" step="0.1" value="0.0">
+                  <div class="cad-step-btns">
+                    <button type="button" class="cad-step-btn" data-axis="y" data-val="-5">-5m</button>
+                    <button type="button" class="cad-step-btn" data-axis="y" data-val="-1">-1m</button>
+                    <button type="button" class="cad-step-btn zero" data-axis="y" data-val="0">0</button>
+                    <button type="button" class="cad-step-btn" data-axis="y" data-val="1">+1m</button>
+                    <button type="button" class="cad-step-btn" data-axis="y" data-val="5">+5m</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fila 4: Lectura Real de Mira (Opcional) y Estado de Corte/Relleno -->
+              <div class="cad-reading-row">
+                <div style="flex: 1;">
+                  <label class="cad-label" for="cad-reading-input">Lectura Real de Mira (Opcional):</label>
+                  <div class="input-with-unit">
+                    <input type="number" id="cad-reading-input" class="form-control cad-num-input" step="0.001" placeholder="Ej. 1.350">
+                    <span class="unit-tag">m</span>
+                  </div>
+                </div>
+                <div style="flex: 1.2;">
+                  <label class="cad-label">Estado Terreno vs Rasante:</label>
+                  <div id="cad-status-badge" class="cad-status-badge pendiente">SIN MEDIR</div>
+                </div>
+              </div>
+
+              <!-- Fila 5: Acciones (Guardar punto y Volver) -->
+              <div class="cad-action-row">
+                <button type="button" id="cad-btn-save-point" class="btn btn-primary btn-block cad-action-btn">
+                  💾 Guardar Punto Auxiliar
+                </button>
+                <button type="button" id="cad-btn-exit-bottom" class="btn btn-outline btn-block cad-action-btn">
+                  ← Volver al Mapa Normal
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Contenedor scrolleable de la malla de estacas (Modo Tabla Tradicional) -->

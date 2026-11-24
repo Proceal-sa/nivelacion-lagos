@@ -43,7 +43,19 @@
     },
     repositionStake: null,
     currentTab: 'tab-grid',
-    activeModalId: null
+    activeModalId: null,
+    isFullscreenMap: false,
+    cadeneroMode: false,
+    cadenero: {
+      baseStake: null,
+      dX: 0.0,
+      dY: 0.0,
+      targetX: 0,
+      targetY: 0,
+      designElev: 0,
+      reading: null,
+      idealReading: null
+    }
   };
 
   // --- ELEMENTOS DEL DOM ---
@@ -88,6 +100,31 @@
     dom.chkShowTin = document.getElementById('chk-show-tin');
     dom.chkShowDistances = document.getElementById('chk-show-distances');
     dom.chkShowFlow = document.getElementById('chk-show-flow');
+
+    // Controles de Pantalla Completa y HUD Cadenero
+    dom.canvasBtnFullscreenToggle = document.getElementById('canvas-btn-fullscreen-toggle');
+    dom.btnToggleFullscreenBar = document.getElementById('btn-toggle-fullscreen-bar');
+    dom.cadeneroTopHud = document.getElementById('cadenero-top-hud');
+    dom.cadeneroBottomHud = document.getElementById('cadenero-bottom-hud');
+    dom.cadeneroBtnBack = document.getElementById('cadenero-btn-back');
+    dom.cadeneroBtnCenter = document.getElementById('cadenero-btn-center');
+    dom.cadHudBaseTag = document.getElementById('cad-hud-base-tag');
+    dom.cadIdealReadingVal = document.getElementById('cad-ideal-reading-val');
+    dom.cadDesignElevVal = document.getElementById('cad-design-elev-val');
+    dom.cadHiVal = document.getElementById('cad-hi-val');
+    dom.cadOffsetSummary = document.getElementById('cad-offset-summary');
+    dom.cadeneroHudToggleBtn = document.getElementById('cadenero-hud-toggle-btn');
+    dom.cadBottomToggleText = document.getElementById('cad-bottom-toggle-text');
+    dom.cadBottomContent = document.getElementById('cadenero-bottom-content');
+    dom.cadBaseStakeSel = document.getElementById('cad-base-stake-sel');
+    dom.cadDxInput = document.getElementById('cad-dx-input');
+    dom.cadDyInput = document.getElementById('cad-dy-input');
+    dom.cadDxBadge = document.getElementById('cad-dx-badge');
+    dom.cadDyBadge = document.getElementById('cad-dy-badge');
+    dom.cadReadingInput = document.getElementById('cad-reading-input');
+    dom.cadStatusBadge = document.getElementById('cad-status-badge');
+    dom.cadBtnSavePoint = document.getElementById('cad-btn-save-point');
+    dom.cadBtnExitBottom = document.getElementById('cad-btn-exit-bottom');
 
     // Tab Configuración
     dom.cfgPondName = document.getElementById('cfg-pond-name');
@@ -842,6 +879,284 @@
     return { toTransformed, fromTransformed, toPx, fromPx, scale, rotDeg, flip, minX, maxX, minY, maxY, tMinX, tMaxX, tMinY, tMaxY };
   }
 
+  // --- REDIMENSIONAMIENTO Y NAVEGACIÓN DE CÁMARA DEL PLANO 2D ---
+  function resizeCanvasToContainer() {
+    const canvas = dom.lakeTinCanvas;
+    const wrapper = dom.canvas2DWrapper;
+    if (!canvas || !wrapper) return;
+    const rect = wrapper.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(300, Math.round(rect.width * dpr));
+    const h = Math.max(200, Math.round(rect.height * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+  }
+
+  function centerCameraOnPoint(worldX, worldY, zoomLevel = null) {
+    if (zoomLevel !== null) {
+      state.canvas.zoom = zoomLevel;
+    }
+    const transform = getPondTransform();
+    const canvas = dom.lakeTinCanvas;
+    if (!canvas) return;
+    const canvasW = canvas.width || 800;
+    const canvasH = canvas.height || 500;
+    const padding = 50 * (window.devicePixelRatio || 1);
+    const t = transform.toTransformed(worldX, worldY);
+
+    state.canvas.panX = (canvasW / 2) - padding - (t.x - transform.tMinX) * transform.scale;
+    state.canvas.panY = -(canvasH / 2) + padding + (t.y - transform.tMinY) * transform.scale;
+    renderCanvas2D();
+  }
+
+  // --- MODO PANTALLA COMPLETA INMERSIVA (COMPATIBLE IPHONE PWA / SAFARI Y ANDROID) ---
+  function enterFullscreenMap(requestNative = true) {
+    state.isFullscreenMap = true;
+    if (dom.canvas2DWrapper) {
+      dom.canvas2DWrapper.classList.add('fullscreen-map-mode');
+    }
+    document.body.classList.add('map-fullscreen-active');
+
+    if (dom.canvasBtnFullscreenToggle) dom.canvasBtnFullscreenToggle.textContent = '✕';
+    if (dom.btnToggleFullscreenBar) dom.btnToggleFullscreenBar.textContent = '✕ Salir Pantalla Completa';
+
+    if (requestNative && dom.canvas2DWrapper && dom.canvas2DWrapper.requestFullscreen) {
+      dom.canvas2DWrapper.requestFullscreen().catch(() => {});
+    }
+
+    resizeCanvasToContainer();
+    renderCanvas2D();
+
+    if (!state.cadeneroMode) {
+      pushNavigationState(state.currentTab, 'fullscreen-map');
+    }
+  }
+
+  function exitFullscreenMap(popHistory = true) {
+    state.isFullscreenMap = false;
+    if (state.cadeneroMode) {
+      state.cadeneroMode = false;
+      if (dom.cadeneroTopHud) dom.cadeneroTopHud.style.display = 'none';
+      if (dom.cadeneroBottomHud) dom.cadeneroBottomHud.style.display = 'none';
+    }
+
+    if (dom.canvas2DWrapper) {
+      dom.canvas2DWrapper.classList.remove('fullscreen-map-mode');
+    }
+    document.body.classList.remove('map-fullscreen-active');
+
+    if (dom.canvasBtnFullscreenToggle) dom.canvasBtnFullscreenToggle.textContent = '⛶';
+    if (dom.btnToggleFullscreenBar) dom.btnToggleFullscreenBar.textContent = '⛶ Pantalla Completa';
+
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+
+    resizeCanvasToContainer();
+    renderCanvas2D();
+
+    if (popHistory && history.state && (history.state.modal === 'fullscreen-map' || history.state.modal === 'cadenero-mode')) {
+      history.back();
+    }
+  }
+
+  function toggleFullscreenMap() {
+    if (state.isFullscreenMap) {
+      exitFullscreenMap(true);
+    } else {
+      enterFullscreenMap(true);
+    }
+  }
+
+  // --- MODO CADENERO EN VIVO SOBRE PLANO 2D (HUD FLOTANTE SUPERIOR E INFERIOR) ---
+  function populateCadeneroBaseStakes(selectedId = null) {
+    if (!dom.cadBaseStakeSel || !state.stakes) return;
+    let html = '';
+    state.stakes.forEach(s => {
+      const isSel = (selectedId && s.id === selectedId) ? 'selected' : '';
+      const cleanCode = s.code.replace('-', '');
+      html += `<option value="${s.id}" ${isSel}>${cleanCode} (X=${s.x.toFixed(1)}m, Y=${s.y.toFixed(1)}m, Z=${s.designElevation.toFixed(3)}m)</option>`;
+    });
+    dom.cadBaseStakeSel.innerHTML = html;
+  }
+
+  function setCadeneroBaseStake(stake) {
+    if (!stake) return;
+    state.cadenero.baseStake = stake;
+    if (dom.cadBaseStakeSel) dom.cadBaseStakeSel.value = stake.id;
+    if (dom.cadHudBaseTag) dom.cadHudBaseTag.textContent = `Base: ${stake.code.replace('-', '')}`;
+    if (dom.cadDxInput) dom.cadDxInput.value = '0.0';
+    if (dom.cadDyInput) dom.cadDyInput.value = '0.0';
+    updateCadeneroCalculations();
+    centerCameraOnPoint(stake.x, stake.y, 1.8);
+  }
+
+  function updateCadeneroCalculations() {
+    const baseStake = state.cadenero.baseStake || state.stakes[0];
+    if (!baseStake || !state.project) return;
+
+    const dx = parseFloat(dom.cadDxInput?.value) || 0;
+    const dy = parseFloat(dom.cadDyInput?.value) || 0;
+
+    state.cadenero.dX = dx;
+    state.cadenero.dY = dy;
+
+    if (dom.cadDxBadge) dom.cadDxBadge.textContent = `${dx >= 0 ? '+' : ''}${dx.toFixed(1)} m`;
+    if (dom.cadDyBadge) dom.cadDyBadge.textContent = `${dy >= 0 ? '+' : ''}${dy.toFixed(1)} m`;
+    if (dom.cadOffsetSummary) dom.cadOffsetSummary.textContent = `dX=${dx.toFixed(1)}m, dY=${dy.toFixed(1)}m`;
+
+    const { uRow, uCol } = getLocalRowColVectors(baseStake);
+    const targetX = baseStake.x + (dx * uRow.x) + (dy * uCol.x);
+    const targetY = baseStake.y + (dx * uRow.y) + (dy * uCol.y);
+    state.cadenero.targetX = targetX;
+    state.cadenero.targetY = targetY;
+
+    // Calcular Cota de Diseño (Rasante)
+    const calcResult = window.TopoMath.calculateDesignElevationAtCoord(targetX, targetY, state.project.settings, state.stakes);
+    const designElev = calcResult.elevation;
+    state.cadenero.designElev = designElev;
+
+    if (dom.cadDesignElevVal) {
+      dom.cadDesignElevVal.textContent = `${designElev.toFixed(3)} m`;
+    }
+
+    // Altura Instrumental y Lectura Ideal de Mira
+    if (state.activeStation && typeof state.activeStation.hi === 'number') {
+      const hi = state.activeStation.hi;
+      if (dom.cadHiVal) dom.cadHiVal.textContent = `${hi.toFixed(3)} m`;
+      const idealReading = hi - designElev;
+      state.cadenero.idealReading = idealReading;
+      if (dom.cadIdealReadingVal) dom.cadIdealReadingVal.textContent = `${idealReading.toFixed(3)} m`;
+    } else {
+      if (dom.cadHiVal) dom.cadHiVal.textContent = '---.--- m';
+      if (dom.cadIdealReadingVal) dom.cadIdealReadingVal.textContent = '---.--- m';
+      state.cadenero.idealReading = null;
+    }
+
+    // Lectura Real opcional
+    const readingVal = parseFloat(dom.cadReadingInput?.value);
+    if (!isNaN(readingVal) && isFinite(readingVal) && state.activeStation) {
+      const actualTerrain = state.activeStation.hi - readingVal;
+      const cutFill = actualTerrain - designElev;
+      const tolMeters = (state.project.settings.toleranceCm || 2.0) / 100;
+      const evalRes = window.TopoMath.evaluateStatus(cutFill, tolMeters);
+
+      if (dom.cadStatusBadge) {
+        dom.cadStatusBadge.className = `cad-status-badge ${evalRes.status.toLowerCase()}`;
+        dom.cadStatusBadge.textContent = `${evalRes.label} (${cutFill > 0 ? '+' : ''}${cutFill.toFixed(3)}m)`;
+      }
+    } else {
+      if (dom.cadStatusBadge) {
+        dom.cadStatusBadge.className = 'cad-status-badge pendiente';
+        dom.cadStatusBadge.textContent = 'SIN MEDIR';
+      }
+    }
+
+    if (dom.cadHudBaseTag) {
+      dom.cadHudBaseTag.textContent = `Base: ${baseStake.code.replace('-', '')}`;
+    }
+  }
+
+  function openCadeneroMode(baseStake = null) {
+    if (!state.activeStation) {
+      alert('Atención: Configure primero una Armada (Altura Instrumental HI) para poder calcular la lectura ideal de mira.');
+      switchTab('tab-station');
+      return;
+    }
+
+    if (state.currentTab !== 'tab-grid') {
+      switchTab('tab-grid');
+    }
+    state.activeViewMode = '2d';
+    renderGridTab();
+
+    enterFullscreenMap(false);
+
+    state.cadeneroMode = true;
+    const initialBase = baseStake || state.stakes[state.currentStakeIndex] || state.stakes[0];
+    state.cadenero = {
+      baseStake: initialBase,
+      dX: 0.0,
+      dY: 0.0,
+      targetX: initialBase ? initialBase.x : 0,
+      targetY: initialBase ? initialBase.y : 0,
+      designElev: initialBase ? initialBase.designElevation : 0,
+      reading: null,
+      idealReading: null
+    };
+
+    populateCadeneroBaseStakes(initialBase ? initialBase.id : null);
+    if (dom.cadDxInput) dom.cadDxInput.value = '0.0';
+    if (dom.cadDyInput) dom.cadDyInput.value = '0.0';
+    if (dom.cadReadingInput) dom.cadReadingInput.value = '';
+
+    if (dom.cadeneroTopHud) dom.cadeneroTopHud.style.display = 'flex';
+    if (dom.cadeneroBottomHud) {
+      dom.cadeneroBottomHud.style.display = 'block';
+      dom.cadeneroBottomHud.classList.remove('collapsed');
+    }
+    if (dom.cadBottomToggleText) {
+      dom.cadBottomToggleText.textContent = '▼ Minimizar panel (Ver plano 100% limpio)';
+    }
+
+    updateCadeneroCalculations();
+
+    if (initialBase) {
+      centerCameraOnPoint(initialBase.x, initialBase.y, 1.8);
+    }
+
+    pushNavigationState(state.currentTab, 'cadenero-mode');
+  }
+
+  function exitCadeneroMode() {
+    state.cadeneroMode = false;
+    if (dom.cadeneroTopHud) dom.cadeneroTopHud.style.display = 'none';
+    if (dom.cadeneroBottomHud) dom.cadeneroBottomHud.style.display = 'none';
+    if (history.state && history.state.modal === 'cadenero-mode') {
+      history.back();
+    }
+    renderCanvas2D();
+  }
+
+  function saveCadeneroAuxPoint() {
+    const baseStake = state.cadenero.baseStake || state.stakes[0];
+    if (!baseStake) return;
+
+    const dx = parseFloat(dom.cadDxInput?.value) || 0;
+    const dy = parseFloat(dom.cadDyInput?.value) || 0;
+    const realReading = parseFloat(dom.cadReadingInput?.value);
+    const hasReading = !isNaN(realReading) && isFinite(realReading);
+    const actualElev = (hasReading && state.activeStation) ? (state.activeStation.hi - realReading) : null;
+    const cutFill = actualElev !== null ? (actualElev - state.cadenero.designElev) : null;
+
+    const aux = {
+      id: 'aux_' + Date.now(),
+      code: `AUX-${baseStake.code.replace('-', '')}+(${dx.toFixed(1)},${dy.toFixed(1)})`,
+      baseStakeId: baseStake.id,
+      baseStakeCode: baseStake.code,
+      dx,
+      dy,
+      x: state.cadenero.targetX,
+      y: state.cadenero.targetY,
+      designElevation: state.cadenero.designElev,
+      reading: hasReading ? realReading : null,
+      actualElevation: actualElev,
+      cutFill: cutFill,
+      timestamp: Date.now()
+    };
+
+    state.auxPoints.push(aux);
+    if (state.project && window.topoDB) {
+      window.topoDB.saveAuxPoint(aux);
+    }
+
+    renderCanvas2D();
+    alert(`✓ Punto Auxiliar guardado:\n${aux.code}\nCota Rasante: ${aux.designElevation.toFixed(3)}m` +
+      (hasReading ? `\nLectura Real: ${realReading.toFixed(3)}m\nCorte/Relleno: ${(cutFill > 0 ? '+' : '') + cutFill.toFixed(3)}m` : ''));
+  }
+
   // --- MOTOR GRÁFICO DEL PLANO 2D ESCALA REAL (TIN / DELAUNAY CON VISTA ROTABLE) ---
   function renderCanvas2D() {
     const canvas = dom.lakeTinCanvas;
@@ -1430,6 +1745,208 @@
         ctx.fillText(subLabel, px + nodeRadius + 3, py + 10);
       }
     });
+
+    // 5. Dibujar Puntos Auxiliares Guardados (si existen)
+    if (state.auxPoints && state.auxPoints.length > 0) {
+      state.auxPoints.forEach(aux => {
+        const pt = transform.toPx(aux.x, aux.y);
+        ctx.fillStyle = '#a855f7'; // Púrpura brillante
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 4.5 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = `bold ${Math.max(8, 9 * dpr)}px sans-serif`;
+        ctx.fillStyle = isDark ? '#d8b4fe' : '#7e22ce';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(aux.code || 'AUX', pt.x + 6 * dpr, pt.y);
+      });
+    }
+
+    // 6. Visualización en Vivo del Cadenero (Mira/Diana Fucsia + Naranja Neón y Acotaciones Punteadas)
+    if (state.cadeneroMode && state.cadenero) {
+      const baseStake = state.cadenero.baseStake || state.stakes[0];
+      if (baseStake) {
+        const { uRow, uCol } = getLocalRowColVectors(baseStake);
+        const dx = parseFloat(dom.cadDxInput?.value) || 0;
+        const dy = parseFloat(dom.cadDyInput?.value) || 0;
+        const targetX = baseStake.x + (dx * uRow.x) + (dy * uCol.x);
+        const targetY = baseStake.y + (dx * uRow.y) + (dy * uCol.y);
+        const cornerX = baseStake.x + (dx * uRow.x);
+        const cornerY = baseStake.y + (dx * uRow.y);
+
+        const ptBase = transform.toPx(baseStake.x, baseStake.y);
+        const ptCorner = transform.toPx(cornerX, cornerY);
+        const ptTarget = transform.toPx(targetX, targetY);
+
+        // Halo fluorescente sobre la estaca base de referencia
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(ptBase.x, ptBase.y, nodeRadius + 7, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Rótulo de Estaca Base
+        ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
+        ctx.fillStyle = '#00ff88';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`BASE (${baseStake.code.replace('-', '')})`, ptBase.x - 6, ptBase.y - 6);
+
+        // Tramo dX punteado (sobre eje de filas / uRow)
+        if (Math.abs(dx) > 0.05) {
+          ctx.strokeStyle = '#f43f5e'; // Fucsia neón
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.moveTo(ptBase.x, ptBase.y);
+          ctx.lineTo(ptCorner.x, ptCorner.y);
+          ctx.stroke();
+
+          const midX = (ptBase.x + ptCorner.x) / 2;
+          const midY = (ptBase.y + ptCorner.y) / 2;
+          ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+          ctx.fillStyle = '#f43f5e';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(`dX = ${dx >= 0 ? '+' : ''}${dx.toFixed(1)}m`, midX, midY - 4);
+        }
+
+        // Tramo dY punteado (sobre eje de columnas / uCol)
+        if (Math.abs(dy) > 0.05) {
+          ctx.strokeStyle = '#fb923c'; // Naranja neón
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.moveTo(ptCorner.x, ptCorner.y);
+          ctx.lineTo(ptTarget.x, ptTarget.y);
+          ctx.stroke();
+
+          const midY_X = (ptCorner.x + ptTarget.x) / 2;
+          const midY_Y = (ptCorner.y + ptTarget.y) / 2;
+          ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+          ctx.fillStyle = '#fb923c';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`dY = ${dy >= 0 ? '+' : ''}${dy.toFixed(1)}m`, midY_X + 6, midY_Y);
+        }
+        ctx.setLineDash([]);
+
+        // Línea directa punteada si hay desfase combinado en ambos ejes
+        if (Math.abs(dx) > 0.05 && Math.abs(dy) > 0.05) {
+          const directDist = Math.hypot(targetX - baseStake.x, targetY - baseStake.y);
+          ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(ptBase.x, ptBase.y);
+          ctx.lineTo(ptTarget.x, ptTarget.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          const midDirectX = (ptBase.x + ptTarget.x) / 2;
+          const midDirectY = (ptBase.y + ptTarget.y) / 2;
+          ctx.font = `${Math.max(8, 9 * dpr)}px sans-serif`;
+          ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'top';
+          ctx.fillText(`D=${directDist.toFixed(1)}m`, midDirectX - 4, midDirectY + 4);
+        }
+
+        // Halo de pulso / brillo del marcador del Cadenero
+        const haloRadius = 26 * dpr;
+        const grad = ctx.createRadialGradient(ptTarget.x, ptTarget.y, 4, ptTarget.x, ptTarget.y, haloRadius);
+        grad.addColorStop(0, 'rgba(244, 63, 94, 0.5)');
+        grad.addColorStop(0.6, 'rgba(251, 146, 60, 0.25)');
+        grad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(ptTarget.x, ptTarget.y, haloRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Círculo exterior fucsia neón
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(ptTarget.x, ptTarget.y, 14 * dpr, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Círculo interior naranja neón
+        ctx.strokeStyle = '#fb923c';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ptTarget.x, ptTarget.y, 7 * dpr, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Cruz / Ticks de la diana
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(ptTarget.x, ptTarget.y - 7 * dpr);
+        ctx.lineTo(ptTarget.x, ptTarget.y - 19 * dpr);
+        ctx.moveTo(ptTarget.x, ptTarget.y + 7 * dpr);
+        ctx.lineTo(ptTarget.x, ptTarget.y + 19 * dpr);
+        ctx.moveTo(ptTarget.x - 7 * dpr, ptTarget.y);
+        ctx.lineTo(ptTarget.x - 19 * dpr, ptTarget.y);
+        ctx.moveTo(ptTarget.x + 7 * dpr, ptTarget.y);
+        ctx.lineTo(ptTarget.x + 19 * dpr, ptTarget.y);
+        ctx.stroke();
+
+        // Punto central blanco
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(ptTarget.x, ptTarget.y, 2.5 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rótulo flotante de Lectura Ideal sobre la diana
+        const idealVal = state.cadenero.idealReading;
+        const labelLine1 = `🎯 MIRA: ${idealVal !== null && !isNaN(idealVal) ? idealVal.toFixed(3) + 'm' : '---'}`;
+        const labelLine2 = `Z_ras = ${state.cadenero.designElev.toFixed(3)}m`;
+
+        ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+        const w1 = ctx.measureText(labelLine1).width;
+        ctx.font = `bold ${Math.max(9, 10 * dpr)}px monospace`;
+        const w2 = ctx.measureText(labelLine2).width;
+        const boxW = Math.max(w1, w2) + 16 * dpr;
+        const boxH = 34 * dpr;
+        const boxX = ptTarget.x - boxW / 2;
+        const boxY = ptTarget.y - 24 * dpr - boxH;
+
+        // Tarjeta oscura de alto contraste
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(boxX, boxY, boxW, boxH, 6 * dpr);
+        ctx.fill();
+        ctx.stroke();
+
+        // Flecha apuntando a la diana
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+        ctx.beginPath();
+        ctx.moveTo(ptTarget.x - 5 * dpr, boxY + boxH);
+        ctx.lineTo(ptTarget.x + 5 * dpr, boxY + boxH);
+        ctx.lineTo(ptTarget.x, boxY + boxH + 5 * dpr);
+        ctx.closePath();
+        ctx.fill();
+
+        // Textos del rótulo flotante
+        ctx.font = `bold ${Math.max(10, 11 * dpr)}px sans-serif`;
+        ctx.fillStyle = '#f43f5e';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(labelLine1, ptTarget.x, boxY + 4 * dpr);
+
+        ctx.font = `bold ${Math.max(9, 10 * dpr)}px monospace`;
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(labelLine2, ptTarget.x, boxY + 18 * dpr);
+      }
+    }
   }
 
   // --- 3. MODAL DE ENTRADA Y TECLADO TÁCTIL (CADENERO) ---
@@ -3016,22 +3533,42 @@
 
   function setupHistoryListener() {
     window.addEventListener('popstate', (event) => {
-      const curModal = getActiveModalId();
       const targetModal = event.state?.modal || null;
       const targetTab = event.state?.tab || 'tab-grid';
 
-      // 1. Cerrar cualquier modal abierto que no corresponda al estado actual
+      // 1. Manejo de Modo Cadenero
+      if (state.cadeneroMode && targetModal !== 'cadenero-mode') {
+        state.cadeneroMode = false;
+        if (dom.cadeneroTopHud) dom.cadeneroTopHud.style.display = 'none';
+        if (dom.cadeneroBottomHud) dom.cadeneroBottomHud.style.display = 'none';
+        renderCanvas2D();
+      }
+
+      // 2. Manejo de Pantalla Completa
+      if (state.isFullscreenMap && targetModal !== 'fullscreen-map' && targetModal !== 'cadenero-mode') {
+        exitFullscreenMap(false);
+      }
+
+      const curModal = getActiveModalId();
+
+      // 3. Cerrar cualquier modal abierto que no corresponda al estado actual
       if (curModal && curModal !== targetModal) {
         closeModalDirectly(curModal);
       }
 
-      // 2. Si el historial apunta a un modal que estaba antes abierto, reabrirlo
+      // 4. Si el historial apunta a un modal que estaba antes abierto, reabrirlo
       if (targetModal && curModal !== targetModal) {
-        const el = document.getElementById(targetModal);
-        if (el) el.classList.add('open');
+        if (targetModal === 'cadenero-mode') {
+          openCadeneroMode();
+        } else if (targetModal === 'fullscreen-map') {
+          enterFullscreenMap(false);
+        } else {
+          const el = document.getElementById(targetModal);
+          if (el) el.classList.add('open');
+        }
       }
 
-      // 3. Conmutar pestaña si es diferente
+      // 5. Conmutar pestaña si es diferente
       if (targetTab !== state.currentTab) {
         switchTab(targetTab, false);
       }
@@ -3246,18 +3783,103 @@
 
     // Quick PC button
     dom.btnQuickPC.addEventListener('click', openPCAssistant);
-    dom.btnQuickOffset.addEventListener('click', () => openOffsetModal());
+    dom.btnQuickOffset.addEventListener('click', () => openCadeneroMode());
     dom.btnToggleEditMode.addEventListener('click', toggleEditMode);
 
     // Conmutadores de vista 2D vs Tabla
     dom.viewMode2D.addEventListener('click', () => {
       state.activeViewMode = '2d';
       renderGridTab();
+      enterFullscreenMap(false);
     });
     dom.viewModeTable.addEventListener('click', () => {
       state.activeViewMode = 'table';
+      if (state.isFullscreenMap) exitFullscreenMap(false);
       renderGridTab();
     });
+
+    // Botones de Pantalla Completa
+    if (dom.canvasBtnFullscreenToggle) {
+      dom.canvasBtnFullscreenToggle.addEventListener('click', toggleFullscreenMap);
+    }
+    if (dom.btnToggleFullscreenBar) {
+      dom.btnToggleFullscreenBar.addEventListener('click', toggleFullscreenMap);
+    }
+
+    // Controles de Cadenero HUD
+    if (dom.cadeneroBtnBack) {
+      dom.cadeneroBtnBack.addEventListener('click', exitCadeneroMode);
+    }
+    if (dom.cadBtnExitBottom) {
+      dom.cadBtnExitBottom.addEventListener('click', exitCadeneroMode);
+    }
+    if (dom.cadeneroBtnCenter) {
+      dom.cadeneroBtnCenter.addEventListener('click', () => {
+        const targetX = state.cadenero.targetX ?? (state.cadenero.baseStake?.x || 0);
+        const targetY = state.cadenero.targetY ?? (state.cadenero.baseStake?.y || 0);
+        centerCameraOnPoint(targetX, targetY, 2.0);
+      });
+    }
+    if (dom.cadeneroHudToggleBtn) {
+      dom.cadeneroHudToggleBtn.addEventListener('click', () => {
+        if (dom.cadeneroBottomHud) {
+          dom.cadeneroBottomHud.classList.toggle('collapsed');
+          const isCollapsed = dom.cadeneroBottomHud.classList.contains('collapsed');
+          if (dom.cadBottomToggleText) {
+            dom.cadBottomToggleText.textContent = isCollapsed
+              ? '▲ Mostrar panel de controles'
+              : '▼ Minimizar panel (Ver plano 100% limpio)';
+          }
+        }
+      });
+    }
+    if (dom.cadBaseStakeSel) {
+      dom.cadBaseStakeSel.addEventListener('change', () => {
+        const selId = dom.cadBaseStakeSel.value;
+        const newBase = state.stakes.find(s => s.id === selId);
+        if (newBase) {
+          setCadeneroBaseStake(newBase);
+        }
+      });
+    }
+    // Botones de paso rápido -5m, -1m, 0, +1m, +5m
+    document.querySelectorAll('.cad-step-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const axis = btn.dataset.axis;
+        const val = parseFloat(btn.dataset.val);
+        if (axis === 'x' && dom.cadDxInput) {
+          if (val === 0) {
+            dom.cadDxInput.value = '0.0';
+          } else {
+            const cur = parseFloat(dom.cadDxInput.value) || 0;
+            dom.cadDxInput.value = (Math.round((cur + val) * 10) / 10).toFixed(1);
+          }
+        } else if (axis === 'y' && dom.cadDyInput) {
+          if (val === 0) {
+            dom.cadDyInput.value = '0.0';
+          } else {
+            const cur = parseFloat(dom.cadDyInput.value) || 0;
+            dom.cadDyInput.value = (Math.round((cur + val) * 10) / 10).toFixed(1);
+          }
+        }
+        updateCadeneroCalculations();
+        renderCanvas2D();
+      });
+    });
+    if (dom.cadDxInput) dom.cadDxInput.addEventListener('input', () => { updateCadeneroCalculations(); renderCanvas2D(); });
+    if (dom.cadDyInput) dom.cadDyInput.addEventListener('input', () => { updateCadeneroCalculations(); renderCanvas2D(); });
+    if (dom.cadReadingInput) dom.cadReadingInput.addEventListener('input', () => { updateCadeneroCalculations(); });
+    if (dom.cadBtnSavePoint) dom.cadBtnSavePoint.addEventListener('click', saveCadeneroAuxPoint);
+
+    // Sincronización con visualViewport para iPhone Notch / teclado virtual
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        if (state.isFullscreenMap) {
+          resizeCanvasToContainer();
+          renderCanvas2D();
+        }
+      });
+    }
 
     // Capas del lienzo
     dom.chkShowTin.addEventListener('change', renderCanvas2D);
@@ -3287,7 +3909,7 @@
     dom.mBtnOffset.addEventListener('click', () => {
       const stake = state.stakes[state.currentStakeIndex];
       closeModalDirectly('modal-stake-input');
-      openOffsetModal(stake);
+      openCadeneroMode(stake);
     });
     dom.mBtnReposition.addEventListener('click', () => {
       const stake = state.stakes[state.currentStakeIndex];
@@ -3560,22 +4182,7 @@
   }
 
   function openOffsetModal(baseStake = null) {
-    if (!state.activeStation) {
-      alert('Atención: Configure primero una Armada (Altura Instrumental HI) para poder calcular la lectura ideal de mira.');
-      switchTab('tab-station');
-      return;
-    }
-
-    const targetStake = baseStake || state.stakes[state.currentStakeIndex] || state.stakes[0];
-    populateOffsetBaseStakes(targetStake ? targetStake.id : null);
-
-    dom.offDxInput.value = '0.0';
-    dom.offDyInput.value = '0.0';
-    dom.offReadingInput.value = '';
-
-    updateOffsetCalculations();
-    dom.modalOffsetPoint.classList.add('open');
-    pushNavigationState(state.currentTab, 'modal-offset-point');
+    openCadeneroMode(baseStake);
   }
 
   function closeOffsetModal() {
@@ -3914,11 +4521,44 @@
       return null;
     };
 
+    const handleCadeneroTouch = (clientX, clientY) => {
+      const pos = getCanvasPos(clientX, clientY);
+      const pondPos = getPondCoords(pos.x, pos.y);
+      const baseStake = state.cadenero.baseStake || state.stakes[0];
+      if (!baseStake) return;
+
+      const { uRow, uCol } = getLocalRowColVectors(baseStake);
+      const deltaX = pondPos.x - baseStake.x;
+      const deltaY = pondPos.y - baseStake.y;
+      const det = (uRow.x * uCol.y) - (uRow.y * uCol.x);
+
+      if (Math.abs(det) > 1e-5) {
+        const dx = (deltaX * uCol.y - deltaY * uCol.x) / det;
+        const dy = (uRow.x * deltaY - uRow.y * deltaX) / det;
+        if (dom.cadDxInput) dom.cadDxInput.value = (Math.round(dx * 10) / 10).toFixed(1);
+        if (dom.cadDyInput) dom.cadDyInput.value = (Math.round(dy * 10) / 10).toFixed(1);
+        updateCadeneroCalculations();
+        renderCanvas2D();
+      }
+    };
+
     // Pointer Down
     const onPointerDown = (clientX, clientY) => {
       const pos = getCanvasPos(clientX, clientY);
       state.canvas.startX = clientX;
       state.canvas.startY = clientY;
+
+      if (state.cadeneroMode) {
+        state.canvas.isMovingCadenero = true;
+        const clickedStake = findStakeAtPos(pos.x, pos.y);
+        const curBase = state.cadenero.baseStake;
+        if (clickedStake && curBase && clickedStake.id !== curBase.id) {
+          setCadeneroBaseStake(clickedStake);
+        } else {
+          handleCadeneroTouch(clientX, clientY);
+        }
+        return;
+      }
 
       const clickedStake = findStakeAtPos(pos.x, pos.y);
 
@@ -3933,6 +4573,13 @@
 
     // Pointer Move
     const onPointerMove = (clientX, clientY) => {
+      if (state.cadeneroMode) {
+        if (state.canvas.isMovingCadenero) {
+          handleCadeneroTouch(clientX, clientY);
+        }
+        return;
+      }
+
       if (state.canvas.isDraggingStake && state.canvas.draggedStake) {
         const pos = getCanvasPos(clientX, clientY);
         const pondPos = getPondCoords(pos.x, pos.y);
@@ -3957,6 +4604,11 @@
 
     // Pointer Up
     const onPointerUp = (clientX, clientY) => {
+      if (state.cadeneroMode) {
+        state.canvas.isMovingCadenero = false;
+        return;
+      }
+
       const dist = Math.hypot(clientX - state.canvas.startX, clientY - state.canvas.startY);
 
       if (state.canvas.isDraggingStake && state.canvas.draggedStake) {
@@ -3980,10 +4632,9 @@
             }
           }
         } else {
-          // Si hace clic en un espacio vacío en modo normal, sugerir medir punto intermedio ahí
+          // Si hace clic en un espacio vacío en modo normal, entrar en modo cadenero
           const pondPos = getPondCoords(pos.x, pos.y);
           if (pondPos.x >= 0 && pondPos.y >= 0) {
-            // Encontrar estaca más cercana
             let closest = state.stakes[0];
             let minDist = Infinity;
             state.stakes.forEach(st => {
@@ -3994,10 +4645,19 @@
               }
             });
             if (closest) {
-              openOffsetModal(closest);
-              dom.offDxInput.value = (pondPos.x - closest.x).toFixed(1);
-              dom.offDyInput.value = (pondPos.y - closest.y).toFixed(1);
-              updateOffsetCalculations();
+              openCadeneroMode(closest);
+              const { uRow, uCol } = getLocalRowColVectors(closest);
+              const deltaX = pondPos.x - closest.x;
+              const deltaY = pondPos.y - closest.y;
+              const det = (uRow.x * uCol.y) - (uRow.y * uCol.x);
+              if (Math.abs(det) > 1e-5) {
+                const dx = (deltaX * uCol.y - deltaY * uCol.x) / det;
+                const dy = (uRow.x * deltaY - uRow.y * deltaX) / det;
+                if (dom.cadDxInput) dom.cadDxInput.value = (Math.round(dx * 10) / 10).toFixed(1);
+                if (dom.cadDyInput) dom.cadDyInput.value = (Math.round(dy * 10) / 10).toFixed(1);
+                updateCadeneroCalculations();
+                renderCanvas2D();
+              }
             }
           }
         }
@@ -4007,30 +4667,77 @@
 
     canvas.addEventListener('mousedown', (e) => onPointerDown(e.clientX, e.clientY));
     window.addEventListener('mousemove', (e) => {
-      if (state.canvas.isPanning || state.canvas.isDraggingStake) {
+      if (state.canvas.isPanning || state.canvas.isDraggingStake || (state.cadeneroMode && state.canvas.isMovingCadenero)) {
         onPointerMove(e.clientX, e.clientY);
       }
     });
     window.addEventListener('mouseup', (e) => {
-      if (state.canvas.isPanning || state.canvas.isDraggingStake) {
+      if (state.canvas.isPanning || state.canvas.isDraggingStake || (state.cadeneroMode && state.canvas.isMovingCadenero)) {
         onPointerUp(e.clientX, e.clientY);
       }
     });
 
+    // Soporte multitáctil fluido (Pinch-to-zoom + Paneo 2 dedos + Tocar/Arrastrar Cadenero)
+    let touchMode = 'none';
+    let initialPinchDist = 0;
+    let initialPinchZoom = 1;
+    let initialPinchCenter = { x: 0, y: 0 };
+    let initialPan = { x: 0, y: 0 };
+
     canvas.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1) {
+      if (e.touches.length === 2) {
+        touchMode = 'pinch';
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        initialPinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        initialPinchZoom = state.canvas.zoom;
+        initialPan = { x: state.canvas.panX, y: state.canvas.panY };
+        initialPinchCenter = {
+          x: (t1.clientX + t2.clientX) / 2,
+          y: (t1.clientY + t2.clientY) / 2
+        };
+        e.preventDefault();
+      } else if (e.touches.length === 1) {
+        touchMode = 'single';
         onPointerDown(e.touches[0].clientX, e.touches[0].clientY);
       }
-    }, { passive: true });
+    }, { passive: false });
 
     canvas.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 1) {
+      if (e.touches.length === 2 && touchMode === 'pinch') {
+        e.preventDefault();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        if (initialPinchDist > 5) {
+          const scaleFactor = curDist / initialPinchDist;
+          state.canvas.zoom = Math.max(0.3, Math.min(5.0, initialPinchZoom * scaleFactor));
+
+          const curCenter = {
+            x: (t1.clientX + t2.clientX) / 2,
+            y: (t1.clientY + t2.clientY) / 2
+          };
+          const dCenter = {
+            x: (curCenter.x - initialPinchCenter.x) * (window.devicePixelRatio || 1),
+            y: (curCenter.y - initialPinchCenter.y) * (window.devicePixelRatio || 1)
+          };
+          state.canvas.panX = initialPan.x + dCenter.x;
+          state.canvas.panY = initialPan.y + dCenter.y;
+          renderCanvas2D();
+        }
+      } else if (e.touches.length === 1 && touchMode === 'single') {
         onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+        if (state.cadeneroMode || state.canvas.isPanning || state.canvas.isDraggingStake) {
+          e.preventDefault();
+        }
       }
-    }, { passive: true });
+    }, { passive: false });
 
     canvas.addEventListener('touchend', (e) => {
-      if (e.changedTouches.length === 1) {
+      if (touchMode === 'pinch' && e.touches.length < 2) {
+        touchMode = 'none';
+      } else if (touchMode === 'single' && e.changedTouches.length === 1) {
+        touchMode = 'none';
         onPointerUp(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
       }
     }, { passive: true });
@@ -4038,7 +4745,7 @@
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
-      state.canvas.zoom = Math.max(0.3, Math.min(4.0, state.canvas.zoom * zoomFactor));
+      state.canvas.zoom = Math.max(0.3, Math.min(5.0, state.canvas.zoom * zoomFactor));
       renderCanvas2D();
     }, { passive: false });
   }

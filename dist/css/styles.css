@@ -1626,3 +1626,374 @@ body.dark-mode .field-control-item {
   color: var(--text-muted);
   pointer-events: none;
 }
+
+/* ==========================================================================
+   MODO PANTALLA COMPLETA REAL E INMERSIVO (PLANO 2D TIN & CADENERO)
+   Compatible con iPhone (iOS Safari / PWA Standalone) y Android (Fullscreen API)
+   ========================================================================== */
+.canvas-2d-container.fullscreen-map-mode {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: 100vw !important;
+  max-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  z-index: 9999 !important;
+  background-color: #ffffff !important;
+  overflow: hidden !important;
+  touch-action: none !important;
+}
+
+body.dark-mode .canvas-2d-container.fullscreen-map-mode {
+  background-color: #0b1120 !important;
+}
+
+body.map-fullscreen-active {
+  overflow: hidden !important;
+  touch-action: none !important;
+}
+
+.canvas-2d-container.fullscreen-map-mode .tin-main-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none !important;
+  display: block;
+}
+
+.canvas-2d-container.fullscreen-map-mode .canvas-floating-controls {
+  top: calc(10px + env(safe-area-inset-top));
+  right: calc(10px + env(safe-area-inset-right));
+  z-index: 60;
+}
+
+.canvas-2d-container.fullscreen-map-mode .canvas-mode-banner {
+  top: calc(10px + env(safe-area-inset-top));
+  left: calc(10px + env(safe-area-inset-left));
+  z-index: 60;
+}
+
+/* Botón flotante para salir o alternar pantalla completa */
+.canvas-btn-fs {
+  background: var(--primary-accent) !important;
+  color: #ffffff !important;
+  border-color: #38bdf8 !important;
+}
+
+/* ==========================================================================
+   HUD SUPERIOR CADENERO (BARRA FLOTANTE DE ALTO CONTRASTE)
+   ========================================================================== */
+.cadenero-top-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 75;
+  padding: calc(8px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 8px calc(12px + env(safe-area-inset-left));
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(15, 23, 42, 0.90) 80%, rgba(15, 23, 42, 0) 100%);
+  color: #f8fafc;
+  pointer-events: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+.cadenero-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cad-hud-btn {
+  min-height: 36px;
+  padding: 4px 12px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.cad-hud-btn:active {
+  transform: scale(0.92);
+}
+
+.cad-hud-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.cad-hud-badge {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #38bdf8;
+}
+
+.cad-hud-subtag {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+
+.cad-ideal-banner {
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid #22c55e;
+  border-radius: 12px;
+  padding: 8px 12px;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.cad-ideal-label {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  color: #86efac;
+  text-transform: uppercase;
+}
+
+.cad-ideal-value {
+  font-family: var(--font-mono);
+  font-size: 2.1rem;
+  font-weight: 900;
+  color: #4ade80;
+  line-height: 1.1;
+  margin: 2px 0;
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.5);
+}
+
+.cad-ideal-meta {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #cbd5e1;
+}
+
+/* ==========================================================================
+   HUD INFERIOR CADENERO (PANEL FLOTANTE COMPACTO Y COLAPSABLE)
+   ========================================================================== */
+.cadenero-bottom-hud {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 600px;
+  margin: 0 auto;
+  z-index: 75;
+  background: rgba(15, 23, 42, 0.93);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.55);
+  padding: 8px 14px calc(10px + env(safe-area-inset-bottom)) 14px;
+  color: #f8fafc;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto;
+}
+
+.cadenero-bottom-hud.collapsed {
+  transform: translateY(calc(100% - 44px - env(safe-area-inset-bottom)));
+}
+
+.cad-bottom-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px 8px 8px 8px;
+  user-select: none;
+}
+
+.cad-drag-pill {
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.45);
+  margin-bottom: 4px;
+}
+
+#cad-bottom-toggle-text {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #94a3b8;
+}
+
+.cad-bottom-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cad-form-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.cad-label {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #cbd5e1;
+  margin-bottom: 2px;
+  display: block;
+}
+
+.cad-select {
+  min-height: 40px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  background-color: #1e293b;
+  color: #ffffff;
+  border-color: #475569;
+}
+
+.cad-touch-hint {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #facc15;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  padding: 5px 8px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.cad-axis-block {
+  background: rgba(30, 41, 59, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.cad-axis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.cad-val-badge {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 900;
+  color: #38bdf8;
+}
+
+.cad-input-step-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cad-num-input {
+  width: 75px;
+  min-height: 38px;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: center;
+  padding: 4px;
+  background-color: #1e293b;
+  color: #ffffff;
+  border-color: #475569;
+}
+
+.cad-step-btns {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.cad-step-btn {
+  flex: 1;
+  min-height: 38px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  border-radius: 6px;
+  background: #334155;
+  border: 1px solid #475569;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.cad-step-btn.zero {
+  background: #0284c7;
+  border-color: #38bdf8;
+}
+
+.cad-step-btn:active {
+  transform: scale(0.92);
+}
+
+.cad-reading-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.cad-status-badge {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 900;
+  padding: 4px 8px;
+  text-align: center;
+  letter-spacing: 0.4px;
+}
+
+.cad-status-badge.a-nivel {
+  background: rgba(34, 197, 94, 0.25);
+  border: 1.5px solid #22c55e;
+  color: #4ade80;
+}
+
+.cad-status-badge.corte {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1.5px solid #ef4444;
+  color: #f87171;
+}
+
+.cad-status-badge.relleno {
+  background: rgba(59, 130, 246, 0.25);
+  border: 1.5px solid #3b82f6;
+  color: #60a5fa;
+}
+
+.cad-status-badge.pendiente {
+  background: rgba(100, 116, 139, 0.25);
+  border: 1.5px solid #64748b;
+  color: #94a3b8;
+}
+
+.cad-action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.cad-action-btn {
+  min-height: 42px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  border-radius: 10px;
+}

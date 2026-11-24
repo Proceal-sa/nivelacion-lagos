@@ -36,11 +36,21 @@
   <link rel="stylesheet" href="./css/styles.css">
 </head>
 <body>
+  <!-- Indicador Visual Sutil de Gesto Swipe-Back iOS -->
+  <div id="swipe-back-indicator" class="swipe-back-indicator" aria-hidden="true">
+    <div class="swipe-back-bubble">
+      <span class="swipe-back-arrow">←</span>
+    </div>
+  </div>
+
   <div id="app-container">
     
     <!-- Header Superior -->
     <header class="app-header">
       <div class="brand-wrapper">
+        <button id="header-btn-back" class="nav-back-btn" style="display: none;" title="Volver a la cuadrícula" aria-label="Volver">
+          ← Volver
+        </button>
         <img src="./icons/icon.svg" alt="Logo" class="app-logo">
         <div>
           <h1 class="brand-title">TopoPiscícola Pro</h1>
@@ -1089,22 +1099,29 @@
          ============================================================ -->
     <div id="modal-stake-input" class="modal-backdrop">
       <div class="modal-sheet">
+        <!-- Barra de Agarre (Drag Handle) para deslizar hacia abajo en móvil -->
+        <div class="sheet-drag-handle" aria-label="Deslizar hacia abajo para cerrar">
+          <div class="drag-bar"></div>
+        </div>
         
         <!-- Cabecera del Modal -->
         <div class="modal-header-row">
+          <button id="m-btn-back-header" class="modal-back-btn btn btn-outline" title="Volver">
+            ← Volver
+          </button>
           <div class="modal-stake-title">
             <span>Estaca</span>
             <span id="m-stake-code" style="color: var(--primary-accent); font-family: var(--font-mono); font-size: 1.6rem;">A-1</span>
             <span id="m-custom-badge" class="custom-design-badge" style="display:none;">Manual</span>
           </div>
           <div class="modal-nav-btns">
-            <button id="m-btn-prev" class="btn btn-outline" style="min-height: 38px; padding: 4px 10px;" title="Estaca Anterior">
+            <button id="m-btn-prev" class="btn btn-outline" style="min-height: 48px; min-width: 44px; padding: 4px 10px;" title="Estaca Anterior">
               ◀ Ant
             </button>
-            <button id="m-btn-next" class="btn btn-outline" style="min-height: 38px; padding: 4px 10px;" title="Siguiente Estaca">
+            <button id="m-btn-next" class="btn btn-outline" style="min-height: 48px; min-width: 44px; padding: 4px 10px;" title="Siguiente Estaca">
               Sig ▶
             </button>
-            <button id="m-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;" title="Cerrar">
+            <button id="m-btn-close" class="modal-close-btn btn btn-danger" title="Cerrar ventana" aria-label="Cerrar">
               ✕
             </button>
           </div>
@@ -1190,6 +1207,11 @@
           </button>
         </div>
 
+        <!-- Botón Grande de Cierre en Zona Segura del Pulgar -->
+        <button id="m-btn-cancel-bottom" type="button" class="btn btn-outline btn-block modal-thumb-close">
+          ✕ Cerrar Teclado (Volver)
+        </button>
+
       </div>
     </div>
 
@@ -1198,11 +1220,19 @@
          ============================================================ -->
     <div id="modal-pc-assistant" class="modal-backdrop">
       <div class="modal-sheet">
+        <!-- Barra de Agarre (Drag Handle) -->
+        <div class="sheet-drag-handle" aria-label="Deslizar hacia abajo para cerrar">
+          <div class="drag-bar"></div>
+        </div>
+
         <div class="modal-header-row">
+          <button id="pc-btn-back-header" class="modal-back-btn btn btn-outline" title="Volver">
+            ← Volver
+          </button>
           <div class="modal-stake-title" style="color: #b45309;">
             🔄 Punto de Cambio (PC)
           </div>
-          <button id="pc-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;">
+          <button id="pc-btn-close" class="modal-close-btn btn btn-danger" title="Cerrar ventana" aria-label="Cerrar">
             ✕
           </button>
         </div>
@@ -1263,6 +1293,11 @@
           ✔ Confirmar y Cambiar a Nueva Armada
         </button>
 
+        <!-- Botón Grande de Cierre en Zona Segura del Pulgar -->
+        <button id="pc-btn-cancel-bottom" type="button" class="btn btn-outline btn-block modal-thumb-close">
+          ✕ Cancelar Punto de Cambio
+        </button>
+
       </div>
     </div>
 
@@ -1271,13 +1306,20 @@
          ============================================================ -->
     <div id="modal-offset-point" class="modal-backdrop">
       <div class="modal-sheet" style="max-width: 580px;">
+        <!-- Barra de Agarre (Drag Handle) -->
+        <div class="sheet-drag-handle" aria-label="Deslizar hacia abajo para cerrar">
+          <div class="drag-bar"></div>
+        </div>
         
         <div class="modal-header-row">
+          <button id="off-btn-back-header" class="modal-back-btn btn btn-outline" title="Volver">
+            ← Volver
+          </button>
           <div class="modal-stake-title" style="color: var(--primary-accent);">
             <span>📐 Punto Intermedio</span>
             <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-muted);">(Desfase)</span>
           </div>
-          <button id="off-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;">✕</button>
+          <button id="off-btn-close" class="modal-close-btn btn btn-danger" title="Cerrar ventana" aria-label="Cerrar">✕</button>
         </div>
 
         <!-- Selección de Estaca Base -->
@@ -1391,6 +1433,11 @@
           </button>
         </div>
 
+        <!-- Botón Grande de Cierre en Zona Segura del Pulgar -->
+        <button id="off-btn-cancel-bottom" type="button" class="btn btn-outline btn-block modal-thumb-close">
+          ✕ Cancelar y Volver al Mapa
+        </button>
+
       </div>
     </div>
 
@@ -1400,13 +1447,20 @@
          ============================================================ -->
     <div id="modal-reposition-stake" class="modal-backdrop">
       <div class="modal-sheet" style="max-width: 580px;">
+        <!-- Barra de Agarre (Drag Handle) -->
+        <div class="sheet-drag-handle" aria-label="Deslizar hacia abajo para cerrar">
+          <div class="drag-bar"></div>
+        </div>
         
         <div class="modal-header-row">
+          <button id="rep-btn-back-header" class="modal-back-btn btn btn-outline" title="Volver">
+            ← Volver
+          </button>
           <div class="modal-stake-title" style="color: #b45309;">
             <span>📍 Replanteo Estaca</span>
             <span id="rep-stake-code" style="color: var(--primary-accent); font-family: var(--font-mono); font-size: 1.5rem;">A-1</span>
           </div>
-          <button id="rep-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;">✕</button>
+          <button id="rep-btn-close" class="modal-close-btn btn btn-danger" title="Cerrar ventana" aria-label="Cerrar">✕</button>
         </div>
 
         <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 8px;">
@@ -1522,15 +1576,27 @@
           ✔ Guardar Nueva Ubicación de Estaca
         </button>
 
+        <!-- Botón Grande de Cierre en Zona Segura del Pulgar -->
+        <button id="rep-btn-cancel-bottom" type="button" class="btn btn-outline btn-block modal-thumb-close">
+          ✕ Cancelar Replanteo
+        </button>
+
       </div>
     </div>
     <div id="modal-edit-design" class="modal-backdrop">
       <div class="modal-sheet" style="max-width: 450px;">
+        <!-- Barra de Agarre (Drag Handle) -->
+        <div class="sheet-drag-handle" aria-label="Deslizar hacia abajo para cerrar">
+          <div class="drag-bar"></div>
+        </div>
         <div class="modal-header-row">
+          <button id="ed-btn-back-header" class="modal-back-btn btn btn-outline" title="Volver">
+            ← Volver
+          </button>
           <div class="modal-stake-title">
             ✏️ Cota Diseño: <span id="ed-stake-code">A-1</span>
           </div>
-          <button id="ed-btn-close" class="btn btn-danger" style="min-height: 38px; padding: 4px 12px;">✕</button>
+          <button id="ed-btn-close" class="modal-close-btn btn btn-danger" title="Cerrar ventana" aria-label="Cerrar">✕</button>
         </div>
 
         <p style="font-size: 0.82rem; color: var(--text-muted); margin: 6px 0;">
@@ -1546,6 +1612,11 @@
           <button id="ed-btn-save" class="btn btn-primary btn-block">Guardar Manual</button>
           <button id="ed-btn-reset" class="btn btn-outline btn-block">Restablecer Teórica</button>
         </div>
+
+        <!-- Botón Grande de Cierre en Zona Segura del Pulgar -->
+        <button id="ed-btn-cancel-bottom" type="button" class="btn btn-outline btn-block modal-thumb-close">
+          ✕ Cancelar
+        </button>
       </div>
     </div>
 

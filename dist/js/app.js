@@ -38,7 +38,9 @@
       hoveredStake: null,
       tinData: null
     },
-    repositionStake: null
+    repositionStake: null,
+    currentTab: 'tab-grid',
+    activeModalId: null
   };
 
   // --- ELEMENTOS DEL DOM ---
@@ -50,6 +52,8 @@
     dom.bannerStationName = document.getElementById('banner-station-name');
     dom.bannerHI = document.getElementById('banner-hi-val');
     dom.btnToggleTheme = document.getElementById('btn-toggle-theme');
+    dom.headerBtnBack = document.getElementById('header-btn-back');
+    dom.swipeBackIndicator = document.getElementById('swipe-back-indicator');
 
     // Tabs
     dom.tabBtns = document.querySelectorAll('.tab-btn');
@@ -298,6 +302,22 @@
     dom.edInputElevation = document.getElementById('ed-input-elevation');
     dom.edBtnSave = document.getElementById('ed-btn-save');
     dom.edBtnReset = document.getElementById('ed-btn-reset');
+
+    // Botones accesibles de retorno (← Volver) y zona de pulgar en cada modal
+    dom.mBtnBackHeader = document.getElementById('m-btn-back-header');
+    dom.mBtnCancelBottom = document.getElementById('m-btn-cancel-bottom');
+
+    dom.pcBtnBackHeader = document.getElementById('pc-btn-back-header');
+    dom.pcBtnCancelBottom = document.getElementById('pc-btn-cancel-bottom');
+
+    dom.offBtnBackHeader = document.getElementById('off-btn-back-header');
+    dom.offBtnCancelBottom = document.getElementById('off-btn-cancel-bottom');
+
+    dom.repBtnBackHeader = document.getElementById('rep-btn-back-header');
+    dom.repBtnCancelBottom = document.getElementById('rep-btn-cancel-bottom');
+
+    dom.edBtnBackHeader = document.getElementById('ed-btn-back-header');
+    dom.edBtnCancelBottom = document.getElementById('ed-btn-cancel-bottom');
   }
 
   // --- INICIALIZACIÓN DE LA APLICACIÓN ---
@@ -306,6 +326,12 @@
     initTheme();
     loadSavedMachineryParams();
     setupEventListeners();
+    setupHistoryListener();
+    setupSwipeBackGesture();
+    setupModalBottomSheetGestures();
+
+    // Estado inicial en el navegador para que retroceder no cierre la app de golpe
+    history.replaceState({ tab: 'tab-grid', modal: null }, '');
 
     try {
       await window.topoDB.init();
@@ -995,12 +1021,11 @@
 
     updateStakeModalUI();
     dom.modalStakeInput.classList.add('open');
+    pushNavigationState(state.currentTab, 'modal-stake-input');
   }
 
   function closeStakeModal() {
-    dom.modalStakeInput.classList.remove('open');
-    renderGridTab();
-    renderExportTab();
+    requestCloseModal('modal-stake-input');
   }
 
   function updateStakeModalUI() {
@@ -1648,10 +1673,11 @@
     dom.pcStationName.value = `Armada ${state.stations.length + 1} (PC-${state.stations.length})`;
 
     dom.modalPCAssistant.classList.add('open');
+    pushNavigationState(state.currentTab, 'modal-pc-assistant');
   }
 
   function closePCAssistant() {
-    dom.modalPCAssistant.classList.remove('open');
+    requestCloseModal('modal-pc-assistant');
   }
 
   function updatePCAssistantCalculations() {
@@ -2224,10 +2250,11 @@
     dom.edStakeCode.textContent = stake.code;
     dom.edInputElevation.value = stake.designElevation.toFixed(3);
     dom.modalEditDesign.classList.add('open');
+    pushNavigationState(state.currentTab, 'modal-edit-design');
   }
 
   function closeEditDesignModal() {
-    dom.modalEditDesign.classList.remove('open');
+    requestCloseModal('modal-edit-design');
   }
 
   async function saveCustomDesign() {
@@ -2293,8 +2320,243 @@
     localStorage.setItem('topolago_theme', isDark ? 'dark' : 'light');
   }
 
+  // --- NAVEGACIÓN, HISTORY API Y CONTROL DE MODALES ---
+  const MODAL_IDS = [
+    'modal-stake-input',
+    'modal-pc-assistant',
+    'modal-offset-point',
+    'modal-reposition-stake',
+    'modal-edit-design'
+  ];
+
+  function getActiveModalId() {
+    for (const id of MODAL_IDS) {
+      const el = document.getElementById(id);
+      if (el && el.classList.contains('open')) return id;
+    }
+    return null;
+  }
+
+  function pushNavigationState(tabId, modalId = null) {
+    const cur = history.state || {};
+    if (cur.tab === tabId && cur.modal === modalId) return;
+    history.pushState({ tab: tabId, modal: modalId }, '');
+  }
+
+  function closeModalDirectly(modalId) {
+    if (!modalId) return;
+    const el = document.getElementById(modalId);
+    if (el) el.classList.remove('open');
+    if (modalId === 'modal-stake-input') {
+      renderGridTab();
+      renderExportTab();
+    }
+  }
+
+  function requestCloseModal(modalId) {
+    if (!modalId) return;
+    if (history.state && history.state.modal === modalId) {
+      history.back();
+    } else {
+      closeModalDirectly(modalId);
+    }
+  }
+
+  function updateHeaderBackButton() {
+    if (!dom.headerBtnBack) return;
+    if (state.currentTab !== 'tab-grid') {
+      dom.headerBtnBack.style.display = 'inline-flex';
+    } else {
+      dom.headerBtnBack.style.display = 'none';
+    }
+  }
+
+  function setupHistoryListener() {
+    window.addEventListener('popstate', (event) => {
+      const curModal = getActiveModalId();
+      const targetModal = event.state?.modal || null;
+      const targetTab = event.state?.tab || 'tab-grid';
+
+      // 1. Cerrar cualquier modal abierto que no corresponda al estado actual
+      if (curModal && curModal !== targetModal) {
+        closeModalDirectly(curModal);
+      }
+
+      // 2. Si el historial apunta a un modal que estaba antes abierto, reabrirlo
+      if (targetModal && curModal !== targetModal) {
+        const el = document.getElementById(targetModal);
+        if (el) el.classList.add('open');
+      }
+
+      // 3. Conmutar pestaña si es diferente
+      if (targetTab !== state.currentTab) {
+        switchTab(targetTab, false);
+      }
+    });
+  }
+
+  // --- GESTO SWIPE-BACK PARA IPHONE EN MODO PWA STANDALONE ---
+  function setupSwipeBackGesture() {
+    const indicator = document.getElementById('swipe-back-indicator');
+    let startX = 0;
+    let startY = 0;
+    let isTracking = false;
+
+    window.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      // Solo iniciar si el toque empieza en el borde izquierdo (clientX <= 35px)
+      if (touch.clientX <= 35) {
+        startX = touch.clientX;
+        startY = touch.clientY;
+        isTracking = true;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!isTracking || e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+
+      // Si predomina movimiento vertical, cancelar gesto de volver
+      if (Math.abs(deltaY) > 50) {
+        isTracking = false;
+        if (indicator) {
+          indicator.classList.remove('active');
+          indicator.style.transform = 'translateY(-50%) translateX(-120%)';
+          indicator.style.opacity = '0';
+        }
+        return;
+      }
+
+      if (deltaX > 15) {
+        if (indicator) {
+          indicator.classList.add('active');
+          const visualX = Math.min(80, deltaX) - 50;
+          const progress = Math.min(1, deltaX / 70);
+          indicator.style.transform = `translateY(-50%) translateX(${visualX}px)`;
+          indicator.style.opacity = `${progress}`;
+        }
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', (e) => {
+      if (!isTracking) return;
+      isTracking = false;
+
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+
+      if (indicator) {
+        indicator.classList.remove('active');
+        indicator.style.transform = 'translateY(-50%) translateX(-120%)';
+        indicator.style.opacity = '0';
+      }
+
+      // Umbral cumplido: deltaX > 70px y deltaY < 50px
+      if (deltaX > 70 && Math.abs(deltaY) < 50) {
+        if (navigator.vibrate) {
+          try { navigator.vibrate(12); } catch (_) {}
+        }
+        const activeModal = getActiveModalId();
+        if (activeModal) {
+          requestCloseModal(activeModal);
+        } else if (state.currentTab !== 'tab-grid') {
+          history.back();
+        } else {
+          history.back();
+        }
+      }
+    }, { passive: true });
+  }
+
+  // --- GESTO SWIPE-DOWN PARA MODALES (BOTTOM SHEET) ---
+  function setupModalBottomSheetGestures() {
+    MODAL_IDS.forEach(modalId => {
+      const backdrop = document.getElementById(modalId);
+      if (!backdrop) return;
+      const sheet = backdrop.querySelector('.modal-sheet');
+      if (!sheet) return;
+
+      // Cerrar al tocar el fondo oscuro exterior
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) {
+          requestCloseModal(modalId);
+        }
+      });
+
+      // Gesto de deslizar hacia abajo para cerrar (Bottom Sheet)
+      let startY = 0;
+      let startX = 0;
+      let isDraggingDown = false;
+      let deltaY = 0;
+
+      sheet.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        // Solo permitir arrastrar hacia abajo si el modal está en el tope de su scroll
+        if (sheet.scrollTop <= 2) {
+          startY = touch.clientY;
+          startX = touch.clientX;
+          isDraggingDown = true;
+          deltaY = 0;
+        } else {
+          isDraggingDown = false;
+        }
+      }, { passive: true });
+
+      sheet.addEventListener('touchmove', (e) => {
+        if (!isDraggingDown || e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        deltaY = touch.clientY - startY;
+        const deltaX = touch.clientX - startX;
+
+        if (deltaY > 5 && Math.abs(deltaY) > Math.abs(deltaX)) {
+          sheet.style.transform = `translateY(${Math.max(0, deltaY)}px)`;
+          sheet.style.transition = 'none';
+        }
+      }, { passive: true });
+
+      sheet.addEventListener('touchend', (e) => {
+        if (!isDraggingDown) return;
+        isDraggingDown = false;
+
+        if (deltaY > 80) {
+          sheet.style.transition = 'transform 0.18s ease-out';
+          sheet.style.transform = 'translateY(100%)';
+          setTimeout(() => {
+            sheet.style.transform = '';
+            sheet.style.transition = '';
+            requestCloseModal(modalId);
+          }, 180);
+        } else {
+          sheet.style.transition = 'transform 0.15s ease-out';
+          sheet.style.transform = '';
+          setTimeout(() => {
+            sheet.style.transition = '';
+          }, 160);
+        }
+        deltaY = 0;
+      }, { passive: true });
+    });
+  }
+
   // --- NAVEGACIÓN DE PESTAÑAS ---
-  function switchTab(targetId) {
+  function switchTab(targetId, pushHistory = true) {
+    const curActiveModal = getActiveModalId();
+    if (curActiveModal) {
+      closeModalDirectly(curActiveModal);
+    }
+
+    state.currentTab = targetId;
+    if (pushHistory) {
+      pushNavigationState(targetId, null);
+    }
+
+    updateHeaderBackButton();
+
     dom.tabBtns.forEach(btn => {
       if (btn.getAttribute('data-tab') === targetId) {
         btn.classList.add('active');
@@ -2321,6 +2583,13 @@
 
   // --- EVENT LISTENERS ---
   function setupEventListeners() {
+    // Header navigation back button
+    if (dom.headerBtnBack) {
+      dom.headerBtnBack.addEventListener('click', () => {
+        history.back();
+      });
+    }
+
     // Theme toggle
     dom.btnToggleTheme.addEventListener('click', toggleTheme);
 
@@ -2370,14 +2639,16 @@
 
     // Modal Lectura
     dom.mBtnClose.addEventListener('click', closeStakeModal);
+    if (dom.mBtnBackHeader) dom.mBtnBackHeader.addEventListener('click', closeStakeModal);
+    if (dom.mBtnCancelBottom) dom.mBtnCancelBottom.addEventListener('click', closeStakeModal);
     dom.mBtnOffset.addEventListener('click', () => {
       const stake = state.stakes[state.currentStakeIndex];
-      closeStakeModal();
+      closeModalDirectly('modal-stake-input');
       openOffsetModal(stake);
     });
     dom.mBtnReposition.addEventListener('click', () => {
       const stake = state.stakes[state.currentStakeIndex];
-      closeStakeModal();
+      closeModalDirectly('modal-stake-input');
       openRepositionModal(stake);
     });
     dom.mBtnPrev.addEventListener('click', () => {
@@ -2521,6 +2792,8 @@
 
     // PC Modal
     dom.pcBtnClose.addEventListener('click', closePCAssistant);
+    if (dom.pcBtnBackHeader) dom.pcBtnBackHeader.addEventListener('click', closePCAssistant);
+    if (dom.pcBtnCancelBottom) dom.pcBtnCancelBottom.addEventListener('click', closePCAssistant);
     dom.pcForesight.addEventListener('input', updatePCAssistantCalculations);
     dom.pcBacksight.addEventListener('input', updatePCAssistantCalculations);
     dom.pcBtnSaveConfirm.addEventListener('click', confirmPCAssistant);
@@ -2534,11 +2807,15 @@
 
     // Edit design modal
     dom.edBtnClose.addEventListener('click', closeEditDesignModal);
+    if (dom.edBtnBackHeader) dom.edBtnBackHeader.addEventListener('click', closeEditDesignModal);
+    if (dom.edBtnCancelBottom) dom.edBtnCancelBottom.addEventListener('click', closeEditDesignModal);
     dom.edBtnSave.addEventListener('click', saveCustomDesign);
     dom.edBtnReset.addEventListener('click', resetCustomDesign);
 
     // Modal Punto Intermedio (Desfase)
     dom.offBtnClose.addEventListener('click', closeOffsetModal);
+    if (dom.offBtnBackHeader) dom.offBtnBackHeader.addEventListener('click', closeOffsetModal);
+    if (dom.offBtnCancelBottom) dom.offBtnCancelBottom.addEventListener('click', closeOffsetModal);
     dom.offBaseStake.addEventListener('change', updateOffsetCalculations);
     dom.offDxInput.addEventListener('input', updateOffsetCalculations);
     dom.offDyInput.addEventListener('input', updateOffsetCalculations);
@@ -2568,6 +2845,8 @@
 
     // Modal Replanteo / Ajuste de Estaca
     dom.repBtnClose.addEventListener('click', closeRepositionModal);
+    if (dom.repBtnBackHeader) dom.repBtnBackHeader.addEventListener('click', closeRepositionModal);
+    if (dom.repBtnCancelBottom) dom.repBtnCancelBottom.addEventListener('click', closeRepositionModal);
     dom.repSubTabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         const subtabId = btn.getAttribute('data-subtab');
@@ -2612,10 +2891,11 @@
 
     updateOffsetCalculations();
     dom.modalOffsetPoint.classList.add('open');
+    pushNavigationState(state.currentTab, 'modal-offset-point');
   }
 
   function closeOffsetModal() {
-    dom.modalOffsetPoint.classList.remove('open');
+    requestCloseModal('modal-offset-point');
   }
 
   function getSelectedBaseStake() {
@@ -3106,10 +3386,11 @@
     switchSubTab('subtab-offset');
     updateRepositionPreview();
     dom.modalRepositionStake.classList.add('open');
+    pushNavigationState(state.currentTab, 'modal-reposition-stake');
   }
 
   function closeRepositionModal() {
-    dom.modalRepositionStake.classList.remove('open');
+    requestCloseModal('modal-reposition-stake');
   }
 
   function switchSubTab(subtabId) {

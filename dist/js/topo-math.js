@@ -353,6 +353,41 @@ const TopoMath = {
     return `${stakeCode} (${parts.join(', ')})`;
   },
 
+  // Parse stake pattern strings like "A=8, B=10, C=10..." or "8, 10, 10..."
+  parseStakePattern(patternStr) {
+    if (!patternStr || typeof patternStr !== 'string' || !patternStr.trim()) {
+      return { hasPattern: false, isLetterMapped: false, letterMap: {}, counts: [] };
+    }
+    const tokens = patternStr.split(',').map(s => s.trim()).filter(Boolean);
+    const letterMap = {};
+    const counts = [];
+    let isLetterMapped = false;
+
+    for (const tok of tokens) {
+      if (tok.includes('=')) {
+        const parts = tok.split('=');
+        const letter = parts[0].trim().toUpperCase();
+        const count = parseInt(parts[1].trim(), 10);
+        if (letter && !isNaN(count) && count > 0) {
+          letterMap[letter] = count;
+          isLetterMapped = true;
+        }
+      } else {
+        const count = parseInt(tok, 10);
+        if (!isNaN(count) && count > 0) {
+          counts.push(count);
+        }
+      }
+    }
+
+    return {
+      hasPattern: isLetterMapped || counts.length > 0,
+      isLetterMapped,
+      letterMap,
+      counts
+    };
+  },
+
   // Distance between two points in meters
   distance(p1, p2) {
     return Math.hypot(p2.x - p1.x, p2.y - p1.y);
@@ -642,6 +677,7 @@ const TopoMath = {
     const reparto = Number(params.reparto !== undefined ? params.reparto : (params.seedReparto !== undefined ? params.seedReparto : 0.5));
     const xB1 = Number(params.xB1 !== undefined ? params.xB1 : (params.seedXB1 !== undefined ? params.seedXB1 : 1.5));
     const yA2 = Number(params.yA2 !== undefined ? params.yA2 : (params.seedYA2 !== undefined ? params.seedYA2 : 1.5));
+    const namingMode = params.namingMode || params.seedNamingMode || 'letters_on_base';
 
     if (dCol <= 0 || dFila <= 0) {
       return { success: false, error: 'd_col y d_fila deben ser mayores a cero' };
@@ -707,9 +743,21 @@ const TopoMath = {
 
     // Cuatro esquinas del cuadro semilla
     const A1 = { x: xA1, y: yA1 };
-    const A2 = { x: xA1 + Ux, y: yA1 + Uy };
-    const B1 = { x: xA1 + Vx, y: yA1 + Vy };
-    const B2 = { x: xA1 + Ux + Vx, y: yA1 + Uy + Vy };
+    let B1, A2, B2;
+
+    if (namingMode === 'numbers_on_base') {
+      // Números sobre Talud Base (vector U), Letras subiendo por Talud Lateral (vector V)
+      A2 = { x: xA1 + Ux, y: yA1 + Uy };
+      B1 = { x: xA1 + Vx, y: yA1 + Vy };
+      B2 = { x: xA1 + Ux + Vx, y: yA1 + Uy + Vy };
+    } else {
+      // letters_on_base (POR DEFECTO):
+      // Letras sobre Talud Base (vector U: A1 -> B1 -> C1...)
+      // Números subiendo por Talud Lateral (vector V: A1 -> A2 -> A3...)
+      B1 = { x: xA1 + Ux, y: yA1 + Uy };
+      A2 = { x: xA1 + Vx, y: yA1 + Vy };
+      B2 = { x: xA1 + Ux + Vx, y: yA1 + Uy + Vy };
+    }
 
     const thetaUDeg = thetaU * 180 / Math.PI;
     const thetaVDeg = thetaV * 180 / Math.PI;
@@ -718,6 +766,7 @@ const TopoMath = {
       success: true,
       refMode,
       reparto: clamp(Number(reparto), 0, 1),
+      namingMode,
       dCol,
       dFila,
       d1,
@@ -757,62 +806,128 @@ const TopoMath = {
 
   /**
    * Genera las estacas del lago usando los vectores inclinados U y V del Cuadro Semilla.
-   * Posición: X = xA1 + (c + offset) * Ux + r * Vx
-   *           Y = yA1 + (c + offset) * Uy + r * Vy
+   * - namingMode = 'letters_on_base': Letras sobre U (Talud Base), Números subiendo en V (Talud Lateral).
+   * - namingMode = 'numbers_on_base': Números sobre U, Letras subiendo en V.
    */
   generateSeedFrameMesh(projId, seedFrame, settings) {
     const { Ux, Uy, Vx, Vy, xA1, yA1 } = seedFrame;
-
-    // Si está en modo seed, usar seedRowPattern si existe; si no, usar seedRows (7) y seedCols (10)
+    const namingMode = seedFrame.namingMode || settings.seedNamingMode || settings.namingMode || 'letters_on_base';
     const patternStr = (settings.meshMode === 'seed' ? settings.seedRowPattern : settings.rowPattern) || '';
-    const rowCounts = patternStr.trim()
-      ? patternStr.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
-      : [];
-
-    const numRows = rowCounts.length > 0 ? rowCounts.length : Number(settings.seedRows || settings.rows || 7);
-    const maxCols = rowCounts.length > 0 ? Math.max(...rowCounts) : Number(settings.seedCols || settings.cols || 10);
-    const alignment = settings.seedAlignment || settings.rowAlignment || 'center'; // 'center', 'left', 'right'
-
+    const parsed = this.parseStakePattern(patternStr);
     const stakes = [];
 
-    for (let r = 0; r < numRows; r++) {
-      const countInRow = rowCounts.length > 0 ? rowCounts[r] : maxCols;
+    if (namingMode === 'letters_on_base') {
+      // MODO PREDETERMINADO:
+      // Letras avanzan sobre Talud Base (vector U, paralelo al Eje X, a 1.50m constantes)
+      // Números de cada letra suben por Talud Lateral (vector V, paralelo al Eje Y, a 1.50m constantes)
+      let numLetters = Number(settings.seedRows || settings.rows || 7);
+      const defaultCols = Number(settings.seedCols || settings.cols || 10);
 
-      for (let c = 0; c < countInRow; c++) {
-        let offsetFila = 0;
-        if (alignment === 'center') {
-          offsetFila = (maxCols - countInRow) / 2;
-        } else if (alignment === 'right') {
-          offsetFila = maxCols - countInRow;
+      if (parsed.isLetterMapped) {
+        for (const letChar of Object.keys(parsed.letterMap)) {
+          const idx = this.letterToRow(letChar);
+          if (idx >= 0 && idx + 1 > numLetters) {
+            numLetters = idx + 1;
+          }
+        }
+      } else if (parsed.counts.length > 0) {
+        numLetters = parsed.counts.length;
+      }
+
+      for (let l = 0; l < numLetters; l++) {
+        const letChar = this.rowToLetter(l);
+        let countInLetter = defaultCols;
+
+        if (parsed.isLetterMapped) {
+          if (parsed.letterMap[letChar] !== undefined) {
+            countInLetter = parsed.letterMap[letChar];
+          }
+        } else if (parsed.counts.length > 0) {
+          if (parsed.counts[l] !== undefined) {
+            countInLetter = parsed.counts[l];
+          }
         }
 
-        const effC = c + offsetFila;
-        const x = xA1 + effC * Ux + r * Vx;
-        const y = yA1 + effC * Uy + r * Vy;
+        // Cada letra nace con su #1 abajo a 1.50m del Talud Base (offset = 0 en Y/V)
+        for (let n = 0; n < countInLetter; n++) {
+          const x = xA1 + l * Ux + n * Vx;
+          const y = yA1 + l * Uy + n * Vy;
 
-        const code = this.getStakeCode(r, c);
-        const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+          const code = this.getStakeCode(l, n);
+          const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
 
-        stakes.push({
-          id: `${projId}_${r}_${c}`,
-          projId: projId,
-          row: r,
-          col: c,
-          code: code,
-          x: Math.round(x * 1000) / 1000,
-          y: Math.round(y * 1000) / 1000,
-          designElevation: designElev.elevation,
-          isCustomDesign: false,
-          reading: null,
-          measuredElevation: null,
-          stationId: null,
-          measuredAt: null,
-          cutFill: null,
-          status: 'PENDIENTE',
-          hasPuddleWarning: false,
-          puddleReason: null,
-          note: ''
-        });
+          stakes.push({
+            id: `${projId}_${l}_${n}`,
+            projId: projId,
+            row: l,
+            col: n,
+            code: code,
+            x: Math.round(x * 1000) / 1000,
+            y: Math.round(y * 1000) / 1000,
+            designElevation: designElev.elevation,
+            isCustomDesign: false,
+            reading: null,
+            measuredElevation: null,
+            stationId: null,
+            measuredAt: null,
+            cutFill: null,
+            status: 'PENDIENTE',
+            hasPuddleWarning: false,
+            puddleReason: null,
+            note: ''
+          });
+        }
+      }
+    } else {
+      // MODO ALTERNATIVO: numbers_on_base
+      // Números avanzan sobre Talud Base (vector U), Letras suben por Talud Lateral (vector V)
+      const rowCounts = parsed.counts.length > 0
+        ? parsed.counts
+        : (parsed.isLetterMapped ? Object.values(parsed.letterMap) : []);
+
+      const numRows = rowCounts.length > 0 ? rowCounts.length : Number(settings.seedRows || settings.rows || 7);
+      const maxCols = rowCounts.length > 0 ? Math.max(...rowCounts) : Number(settings.seedCols || settings.cols || 10);
+      const alignment = settings.seedAlignment || settings.rowAlignment || 'center'; // 'center', 'left', 'right'
+
+      for (let r = 0; r < numRows; r++) {
+        const countInRow = rowCounts.length > 0 ? rowCounts[r] : maxCols;
+
+        for (let c = 0; c < countInRow; c++) {
+          let offsetFila = 0;
+          if (alignment === 'center') {
+            offsetFila = (maxCols - countInRow) / 2;
+          } else if (alignment === 'right') {
+            offsetFila = maxCols - countInRow;
+          }
+
+          const effC = c + offsetFila;
+          const x = xA1 + effC * Ux + r * Vx;
+          const y = yA1 + effC * Uy + r * Vy;
+
+          const code = this.getStakeCode(r, c);
+          const designElev = this.calculateDesignElevationAtCoord(x, y, settings, []);
+
+          stakes.push({
+            id: `${projId}_${r}_${c}`,
+            projId: projId,
+            row: r,
+            col: c,
+            code: code,
+            x: Math.round(x * 1000) / 1000,
+            y: Math.round(y * 1000) / 1000,
+            designElevation: designElev.elevation,
+            isCustomDesign: false,
+            reading: null,
+            measuredElevation: null,
+            stationId: null,
+            measuredAt: null,
+            cutFill: null,
+            status: 'PENDIENTE',
+            hasPuddleWarning: false,
+            puddleReason: null,
+            note: ''
+          });
+        }
       }
     }
 

@@ -160,7 +160,7 @@
               <input type="checkbox" id="chk-show-tin" checked> 🔺 Red TIN
             </label>
             <label class="canvas-layer-toggle">
-              <input type="checkbox" id="chk-show-distances" checked> 📏 Distancias (m)
+              <input type="checkbox" id="chk-show-distances"> 📏 Distancias (m)
             </label>
             <label class="canvas-layer-toggle">
               <input type="checkbox" id="chk-show-flow" checked> 〰️ Flechas Drenaje
@@ -257,45 +257,51 @@
             </div>
 
             <!-- 1. Medidas de Cinta del Cuadro Semilla -->
-            <label class="form-label" style="font-size: 0.88rem; color: #0284c7; font-weight: 700;">
-              ① Medidas con Cinta del Cuadro Semilla (A1, A2, B1, B2):
-            </label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+              <label class="form-label" style="font-size: 0.88rem; color: #0284c7; font-weight: 700; margin-bottom: 0;">
+                ① Medidas con Cinta del Cuadro Semilla (A1, B1, A2, B2):
+              </label>
+              <!-- Switch rápido de transposición de nomenclatura -->
+              <button type="button" id="seed-toggle-transpose-btn" class="btn btn-sm btn-outline" style="font-size: 0.76rem; padding: 3px 8px; font-weight: 700; border-radius: 4px; border-color: #0284c7; color: #0284c7;">
+                🔄 Intercambiar Letras ↔ Números
+              </button>
+            </div>
             <div class="form-grid-2" style="margin-bottom: 8px;">
               <div class="form-group">
-                <label class="form-label" for="seed-dcol">Tramo Columna d_col (A1 ➔ A2):</label>
+                <label class="form-label" for="seed-dcol" id="lbl-seed-dcol">Distancia entre Letras (A1 ➔ B1) sobre Talud Base:</label>
                 <div class="input-with-unit">
                   <input type="number" id="seed-dcol" class="form-control" step="0.1" value="15.0" placeholder="Ej. 15.0">
                   <span class="unit-tag">m</span>
                 </div>
-                <div class="form-help">Distancia entre columnas contiguas</div>
+                <div class="form-help" id="help-seed-dcol">Avance sobre vector U (paralelo al Talud Base)</div>
               </div>
               <div class="form-group">
-                <label class="form-label" for="seed-dfila">Tramo Fila d_fila (A1 ➔ B1):</label>
+                <label class="form-label" for="seed-dfila" id="lbl-seed-dfila">Distancia entre Números (A1 ➔ A2) sobre Talud Lateral:</label>
                 <div class="input-with-unit">
                   <input type="number" id="seed-dfila" class="form-control" step="0.1" value="15.0" placeholder="Ej. 15.0">
                   <span class="unit-tag">m</span>
                 </div>
-                <div class="form-help">Distancia entre filas contiguas (letras)</div>
+                <div class="form-help" id="help-seed-dfila">Avance sobre vector V (subiendo por Talud Lateral)</div>
               </div>
             </div>
 
             <!-- Diagonales del Cuadro Semilla -->
             <div class="form-grid-2" style="margin-bottom: 10px;">
               <div class="form-group">
-                <label class="form-label" for="seed-d1">Diagonal 1 d1 (A1 ➔ B2 Mayor):</label>
+                <label class="form-label" for="seed-d1" id="lbl-seed-d1">Diagonal Mayor (A1 ➔ B2):</label>
                 <div class="input-with-unit">
                   <input type="number" id="seed-d1" class="form-control" step="0.01" value="23.85" placeholder="Ej. 23.85">
                   <span class="unit-tag">m</span>
                 </div>
-                <div class="form-help">Diagonal cruzada A1 hacia B2</div>
+                <div class="form-help">Diagonal larga entre esquinas opuestas A1 y B2</div>
               </div>
               <div class="form-group">
-                <label class="form-label" for="seed-d2">Diagonal 2 d2 (A2 ➔ B1 Menor):</label>
+                <label class="form-label" for="seed-d2" id="lbl-seed-d2">Diagonal Menor (B1 ➔ A2):</label>
                 <div class="input-with-unit">
                   <input type="number" id="seed-d2" class="form-control" step="0.01" value="18.20" placeholder="Ej. 18.20">
                   <span class="unit-tag">m</span>
                 </div>
-                <div class="form-help">Diagonal cruzada A2 hacia B1</div>
+                <div class="form-help">Diagonal corta cruzada entre B1 y A2</div>
               </div>
             </div>
 
@@ -405,24 +411,29 @@
               </div>
             </div>
 
-            <!-- Cantidad de Estacas y Filas -->
+            <!-- Cantidad de Estacas: Letras y Números -->
             <label class="form-label" style="font-size: 0.88rem; color: #7c3aed; font-weight: 700;">
-              ④ Extensión de la Malla (ej. 7 Filas × 10 Columnas = 70 Estacas):
+              ④ Extensión de la Malla:
             </label>
             <div class="form-grid-2" style="margin-bottom: 8px;">
               <div class="form-group">
-                <label class="form-label" for="seed-rows">Número de Filas (A..G):</label>
+                <label class="form-label" for="seed-rows" id="lbl-seed-rows">Número de Letras sobre Base (A..G):</label>
                 <input type="number" id="seed-rows" class="form-control" min="2" max="26" value="7">
+                <div class="form-help" id="help-seed-rows">Letras contiguas sobre el Talud Base (ej. 7 = A..G)</div>
               </div>
               <div class="form-group">
-                <label class="form-label" for="seed-cols">Columnas por Fila (1..10):</label>
+                <label class="form-label" for="seed-cols" id="lbl-seed-cols">Estacas por Letra (1..10):</label>
                 <input type="number" id="seed-cols" class="form-control" min="2" max="50" value="10">
+                <div class="form-help" id="help-seed-cols">Estacas subiendo por el Talud Lateral (ej. 10 = #1..#10)</div>
               </div>
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="seed-row-pattern">Patrón de Estacas Opcional (ej. 5, 7, 7, 7, 5):</label>
-              <input type="text" id="seed-row-pattern" class="form-control" placeholder="Dejar vacío para rectangular (ej. 7x10=70 estacas) o escribir conteo">
+              <label class="form-label" for="seed-row-pattern" id="lbl-seed-row-pattern">
+                Estacas por Letra Opcional (ej. A=8, B=10, C=10, D=10, E=11, F=9, G=5):
+              </label>
+              <input type="text" id="seed-row-pattern" class="form-control" placeholder="Dejar vacío para rectangular (ej. 7x10=70 estacas) o escribir conteo de cada letra">
+              <div class="form-help" id="help-seed-row-pattern">Todas las letras nacen con su #1 abajo a 1.50m del Talud Base (offset = 0)</div>
             </div>
 
             <div class="form-group">

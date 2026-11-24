@@ -23,6 +23,7 @@
     seedRefMode: 'dual_inclinado', // 'dual_inclinado' | 'ejes_ortogonales' | 'talud_paralelo'
     seedReparto: 0.5,
     seedAlignment: 'center',
+    seedNamingMode: 'letters_on_base', // 'letters_on_base' (default) | 'numbers_on_base'
     tapeAlignment: 'center', // 'center' | 'left' | 'right'
     boxMode: 'stake', // 'stake' | 'tape'
     boxTapeCoords: null,
@@ -134,6 +135,19 @@
     dom.seedAlignCenterBtn = document.getElementById('seed-align-center-btn');
     dom.seedAlignLeftBtn = document.getElementById('seed-align-left-btn');
     dom.seedAlignRightBtn = document.getElementById('seed-align-right-btn');
+    dom.seedToggleTransposeBtn = document.getElementById('seed-toggle-transpose-btn');
+    dom.lblSeedDCol = document.getElementById('lbl-seed-dcol');
+    dom.lblSeedDFila = document.getElementById('lbl-seed-dfila');
+    dom.lblSeedD1 = document.getElementById('lbl-seed-d1');
+    dom.lblSeedD2 = document.getElementById('lbl-seed-d2');
+    dom.helpSeedDCol = document.getElementById('help-seed-dcol');
+    dom.helpSeedDFila = document.getElementById('help-seed-dfila');
+    dom.lblSeedRows = document.getElementById('lbl-seed-rows');
+    dom.lblSeedCols = document.getElementById('lbl-seed-cols');
+    dom.helpSeedRows = document.getElementById('help-seed-rows');
+    dom.helpSeedCols = document.getElementById('help-seed-cols');
+    dom.lblSeedRowPattern = document.getElementById('lbl-seed-row-pattern');
+    dom.helpSeedRowPattern = document.getElementById('help-seed-row-pattern');
 
     // Campos Modo Cinta (4 bordes + 2 diagonales)
     dom.tapeL12 = document.getElementById('tape-l12');
@@ -412,6 +426,7 @@
         seedYA1: 1.5,
         seedRefMode: 'dual_inclinado',
         seedReparto: 0.5,
+        seedNamingMode: 'letters_on_base',
         seedXB1: 1.5,
         seedYA2: 5.48,
         seedRows: 7,
@@ -1049,15 +1064,19 @@
         ctx.fillText(`yA2=${A2.y.toFixed(2)}m`, (ptAxisX_A2.x + ptA2.x) / 2 + 6, (ptAxisX_A2.y + ptA2.y) / 2);
       }
 
-      // Dibujar paralelogramo del Cuadro Semilla (A1 -> A2 -> B2 -> B1 -> A1)
+      const isLettersOnBase = (sf.namingMode || state.seedNamingMode || state.project?.settings?.seedNamingMode) !== 'numbers_on_base';
+      const ptBase = isLettersOnBase ? ptB1 : ptA2;
+      const ptLat = isLettersOnBase ? ptA2 : ptB1;
+
+      // Dibujar paralelogramo del Cuadro Semilla
       ctx.setLineDash([]);
       ctx.strokeStyle = '#f59e0b'; // Ámbar prominente
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(ptA1.x, ptA1.y);
-      ctx.lineTo(ptA2.x, ptA2.y);
+      ctx.lineTo(ptBase.x, ptBase.y);
       ctx.lineTo(ptB2.x, ptB2.y);
-      ctx.lineTo(ptB1.x, ptB1.y);
+      ctx.lineTo(ptLat.x, ptLat.y);
       ctx.closePath();
       ctx.stroke();
 
@@ -1065,7 +1084,7 @@
       ctx.fillStyle = isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.08)';
       ctx.fill();
 
-      // Diagonales d1 (A1 -> B2) y d2 (A2 -> B1)
+      // Diagonales d1 (A1 -> B2) y d2 (Base <-> Lat)
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
 
@@ -1076,17 +1095,17 @@
       ctx.lineTo(ptB2.x, ptB2.y);
       ctx.stroke();
 
-      // d2: A2 -> B1 (cyan)
+      // d2: ptBase -> ptLat (cyan)
       ctx.strokeStyle = '#06b6d4';
       ctx.beginPath();
-      ctx.moveTo(ptA2.x, ptA2.y);
-      ctx.lineTo(ptB1.x, ptB1.y);
+      ctx.moveTo(ptBase.x, ptBase.y);
+      ctx.lineTo(ptLat.x, ptLat.y);
       ctx.stroke();
       ctx.setLineDash([]);
 
       // Rótulos con fondo de las diagonales
       const midD1 = { x: (ptA1.x + ptB2.x) / 2, y: (ptA1.y + ptB2.y) / 2 };
-      const midD2 = { x: (ptA2.x + ptB1.x) / 2, y: (ptA2.y + ptB1.y) / 2 };
+      const midD2 = { x: (ptBase.x + ptLat.x) / 2, y: (ptBase.y + ptLat.y) / 2 };
 
       ctx.font = `bold ${Math.max(9, 10 * (window.devicePixelRatio || 1))}px sans-serif`;
       ctx.textAlign = 'center';
@@ -1094,32 +1113,35 @@
 
       // Badge d1
       ctx.fillStyle = '#ec4899';
-      ctx.fillText(`d1=${d1.toFixed(2)}m`, midD1.x - 12, midD1.y - 12);
+      ctx.fillText(`d1=${d1.toFixed(2)}m (A1➔B2)`, midD1.x - 12, midD1.y - 12);
 
       // Badge d2
       ctx.fillStyle = '#06b6d4';
-      ctx.fillText(`d2=${d2.toFixed(2)}m`, midD2.x + 12, midD2.y + 12);
+      const d2Label = isLettersOnBase ? `d2=${d2.toFixed(2)}m (B1➔A2)` : `d2=${d2.toFixed(2)}m (A2➔B1)`;
+      ctx.fillText(d2Label, midD2.x + 12, midD2.y + 12);
 
       // Arco de Ángulo interno alpha en A1
       ctx.strokeStyle = '#f59e0b';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      const angleU_px = Math.atan2(ptA2.y - ptA1.y, ptA2.x - ptA1.x);
-      const angleV_px = Math.atan2(ptB1.y - ptA1.y, ptB1.x - ptA1.x);
+      const angleU_px = Math.atan2(ptBase.y - ptA1.y, ptBase.x - ptA1.x);
+      const angleV_px = Math.atan2(ptLat.y - ptA1.y, ptLat.x - ptA1.x);
       ctx.arc(ptA1.x, ptA1.y, 24 * (window.devicePixelRatio || 1), angleV_px, angleU_px, angleU_px < angleV_px);
       ctx.stroke();
       ctx.fillStyle = '#f59e0b';
       ctx.textAlign = 'left';
       ctx.fillText(`α=${alphaDeg.toFixed(1)}°`, ptA1.x + 28, ptA1.y - 16);
 
-      // Línea de referencia y pendiente para verificar inclinación de la Fila A respecto a Eje X
-      const rowAStakes = state.stakes.filter(s => s.row === 0);
-      if (rowAStakes.length >= 2) {
-        const firstA = rowAStakes[0];
-        const lastA = rowAStakes[rowAStakes.length - 1];
-        const pFirst = transform.toPx(firstA.x, firstA.y);
-        const pLast = transform.toPx(lastA.x, lastA.y);
-        const pHorizRef = transform.toPx(lastA.x, firstA.y);
+      // Línea de referencia y pendiente para verificar inclinación respecto a Eje X
+      const baseStakes = isLettersOnBase
+        ? state.stakes.filter(s => s.col === 0)
+        : state.stakes.filter(s => s.row === 0);
+      if (baseStakes.length >= 2) {
+        const firstBase = baseStakes[0];
+        const lastBase = baseStakes[baseStakes.length - 1];
+        const pFirst = transform.toPx(firstBase.x, firstBase.y);
+        const pLast = transform.toPx(lastBase.x, lastBase.y);
+        const pHorizRef = transform.toPx(lastBase.x, firstBase.y);
 
         ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)';
         ctx.setLineDash([3, 3]);
@@ -1139,7 +1161,8 @@
         ctx.fillStyle = '#f59e0b';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`Fila A inclinada: ΔY = +${(lastA.y - firstA.y).toFixed(2)}m (θU = ${thetaUDeg >= 0 ? '+' : ''}${thetaUDeg.toFixed(1)}°)`, pLast.x + 10, pLast.y);
+        const baseTitle = isLettersOnBase ? `Base Letras (${firstBase.code}➔${lastBase.code})` : 'Fila A';
+        ctx.fillText(`${baseTitle} inclinada: ΔY = +${(lastBase.y - firstBase.y).toFixed(2)}m (θU = ${thetaUDeg >= 0 ? '+' : ''}${thetaUDeg.toFixed(1)}°)`, pLast.x + 10, pLast.y);
       }
 
       // 1.4 Dibujar AMBOS Taludes con flechas inclinadas hacia adentro despegándose del Eje X y Eje Y
@@ -1148,7 +1171,7 @@
       ctx.strokeStyle = taludColor;
       ctx.lineWidth = 3;
 
-      // Talud Base: corre con inclinación theta_U despegado del Eje X (paralelo a Fila A a 1.50m)
+      // Talud Base: corre con inclinación theta_U despegado del Eje X
       const lenBase = Math.max(transform.maxX + 10, 140);
       const endBaseX = lenBase * Math.cos(sf.thetaU);
       const endBaseY = lenBase * Math.sin(sf.thetaU);
@@ -1175,9 +1198,12 @@
       ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(`Talud Base (+${sf.thetaUDeg.toFixed(1)}° despegado de Eje X, a ${yA1.toFixed(2)}m de Fila A)`, pTaludBase1.x + 8, pTaludBase1.y);
+      const baseTaludLabel = isLettersOnBase
+        ? `Talud Base (+${sf.thetaUDeg.toFixed(1)}° despegado de Eje X, a ${yA1.toFixed(2)}m de A1..G1)`
+        : `Talud Base (+${sf.thetaUDeg.toFixed(1)}° despegado de Eje X, a ${yA1.toFixed(2)}m de Fila A)`;
+      ctx.fillText(baseTaludLabel, pTaludBase1.x + 8, pTaludBase1.y);
 
-      // Talud Lateral: corre con inclinación theta_V despegado del Eje Y (paralelo a Columna 1 a 1.50m)
+      // Talud Lateral: corre con inclinación theta_V despegado del Eje Y
       const lenLat = Math.max(transform.maxY + 10, 100);
       const endLatX = lenLat * Math.cos(sf.thetaV);
       const endLatY = lenLat * Math.sin(sf.thetaV);
@@ -1198,6 +1224,16 @@
       ctx.lineTo(pTaludLat1.x - arrowLenLat * Math.cos(dirLat - Math.PI / 7), pTaludLat1.y - arrowLenLat * Math.sin(dirLat - Math.PI / 7));
       ctx.lineTo(pTaludLat1.x - arrowLenLat * Math.cos(dirLat + Math.PI / 7), pTaludLat1.y - arrowLenLat * Math.sin(dirLat + Math.PI / 7));
       ctx.closePath();
+      ctx.fill();
+
+      // Rótulo Talud Lateral
+      ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      const latTaludLabel = isLettersOnBase
+        ? `Talud Lateral (${sf.despegueYDeg.toFixed(1)}° despegado de Eje Y, a ${xA1.toFixed(2)}m de A1..A10)`
+        : `Talud Lateral (${sf.despegueYDeg.toFixed(1)}° despegado de Eje Y, a ${xA1.toFixed(2)}m de Columna 1)`;
+      ctx.fillText(latTaludLabel, pTaludLat1.x + 8, pTaludLat1.y);
       ctx.fill();
 
       // Rótulo Talud Lateral
@@ -1239,7 +1275,7 @@
     state.canvas.tinData = tin;
 
     const showTin = dom.chkShowTin ? dom.chkShowTin.checked : true;
-    const showDist = dom.chkShowDistances ? dom.chkShowDistances.checked : true;
+    const showDist = dom.chkShowDistances ? dom.chkShowDistances.checked : false;
     const showFlow = dom.chkShowFlow ? dom.chkShowFlow.checked : true;
 
     // Dibujar aristas TIN
@@ -1642,6 +1678,8 @@
     if (dom.seedCols) dom.seedCols.value = s.seedCols ?? 10;
     if (dom.seedRowPattern) dom.seedRowPattern.value = s.seedRowPattern || '';
 
+    state.seedNamingMode = s.seedNamingMode || 'letters_on_base';
+    setSeedNamingMode(state.seedNamingMode);
     selectSeedRefMode(s.seedRefMode || 'dual_inclinado');
     selectSeedAlignment(s.seedAlignment || 'center');
     updateSeedFramePreview();
@@ -1702,6 +1740,83 @@
     }
   }
 
+  function setSeedNamingMode(mode) {
+    state.seedNamingMode = mode === 'numbers_on_base' ? 'numbers_on_base' : 'letters_on_base';
+    const isLettersOnBase = state.seedNamingMode === 'letters_on_base';
+
+    if (dom.seedToggleTransposeBtn) {
+      dom.seedToggleTransposeBtn.textContent = isLettersOnBase
+        ? '🔄 Modo: Letras en Base (A..G) ↔ Números Suben'
+        : '🔄 Modo: Números en Base (1..10) ↔ Letras Suben';
+    }
+
+    if (dom.lblSeedDCol) {
+      dom.lblSeedDCol.textContent = isLettersOnBase
+        ? 'Distancia entre Letras (A1 ➔ B1) sobre Talud Base:'
+        : 'Distancia entre Números (A1 ➔ A2) sobre Talud Base:';
+    }
+    if (dom.helpSeedDCol) {
+      dom.helpSeedDCol.textContent = 'Avance sobre vector U (paralelo al Talud Base)';
+    }
+
+    if (dom.lblSeedDFila) {
+      dom.lblSeedDFila.textContent = isLettersOnBase
+        ? 'Distancia entre Números (A1 ➔ A2) sobre Talud Lateral:'
+        : 'Distancia entre Letras (A1 ➔ B1) sobre Talud Lateral:';
+    }
+    if (dom.helpSeedDFila) {
+      dom.helpSeedDFila.textContent = 'Avance sobre vector V (subiendo por Talud Lateral)';
+    }
+
+    if (dom.lblSeedD1) {
+      dom.lblSeedD1.textContent = 'Diagonal Mayor (A1 ➔ B2):';
+    }
+    if (dom.lblSeedD2) {
+      dom.lblSeedD2.textContent = isLettersOnBase
+        ? 'Diagonal Menor (B1 ➔ A2):'
+        : 'Diagonal Menor (A2 ➔ B1):';
+    }
+
+    if (dom.lblSeedRows) {
+      dom.lblSeedRows.textContent = isLettersOnBase
+        ? 'Número de Letras sobre Base (A..G):'
+        : 'Número de Filas de Letras (A..G):';
+    }
+    if (dom.helpSeedRows) {
+      dom.helpSeedRows.textContent = isLettersOnBase
+        ? 'Letras contiguas sobre el Talud Base (ej. 7 = A..G)'
+        : 'Filas subiendo por el Talud Lateral';
+    }
+
+    if (dom.lblSeedCols) {
+      dom.lblSeedCols.textContent = isLettersOnBase
+        ? 'Estacas por Letra (1..10):'
+        : 'Estacas por Fila (1..10):';
+    }
+    if (dom.helpSeedCols) {
+      dom.helpSeedCols.textContent = isLettersOnBase
+        ? 'Estacas subiendo por el Talud Lateral (ej. 10 = #1..#10)'
+        : 'Estacas avanzando sobre el Talud Base';
+    }
+
+    if (dom.lblSeedRowPattern) {
+      dom.lblSeedRowPattern.textContent = isLettersOnBase
+        ? 'Estacas por Letra Opcional (ej. A=8, B=10, C=10, D=10, E=11, F=9, G=5):'
+        : 'Estacas por Fila Opcional (ej. A=5, B=7, C=7, D=7, E=5):';
+    }
+    if (dom.helpSeedRowPattern) {
+      dom.helpSeedRowPattern.textContent = isLettersOnBase
+        ? 'Todas las letras nacen con su #1 abajo a 1.50m del Talud Base (offset = 0)'
+        : 'Configura la cantidad de estacas por fila de letras';
+    }
+  }
+
+  function toggleSeedNamingMode() {
+    const nextMode = (state.seedNamingMode === 'letters_on_base') ? 'numbers_on_base' : 'letters_on_base';
+    setSeedNamingMode(nextMode);
+    updateSeedFramePreview();
+  }
+
   function updateSeedFramePreview() {
     if (!dom.seedDCol || !dom.seedDFila || !dom.seedD1 || !dom.seedD2) return;
     const dCol = parseFloat(dom.seedDCol.value) || 15.0;
@@ -1719,7 +1834,8 @@
       dCol, dFila, d1, d2, xA1, yA1,
       refMode: state.seedRefMode || 'dual_inclinado',
       reparto,
-      xB1, yA2
+      xB1, yA2,
+      namingMode: state.seedNamingMode || 'letters_on_base'
     });
 
     if (res.success) {
@@ -1745,9 +1861,17 @@
         dom.seedResVecV.textContent = `Vx=${res.Vx.toFixed(2)}m, Vy=${res.Vy.toFixed(2)}m`;
       }
       if (dom.seedResA2A10) {
-        const a10X = (xA1 + 9 * res.Ux).toFixed(2);
-        const a10Y = (yA1 + 9 * res.Uy).toFixed(2);
-        dom.seedResA2A10.textContent = `A1(${res.A1.x.toFixed(2)}, ${res.A1.y.toFixed(2)}) ➔ A2(${res.A2.x.toFixed(2)}, ${res.A2.y.toFixed(2)}) ➔ A10(${a10X}, ${a10Y}) | B1(${res.B1.x.toFixed(2)}, ${res.B1.y.toFixed(2)}) | B2(${res.B2.x.toFixed(2)}, ${res.B2.y.toFixed(2)})`;
+        if (state.seedNamingMode === 'letters_on_base') {
+          const a10X = (xA1 + 9 * res.Vx).toFixed(2);
+          const a10Y = (yA1 + 9 * res.Vy).toFixed(2);
+          const g1X = (xA1 + 6 * res.Ux).toFixed(2);
+          const g1Y = (yA1 + 6 * res.Uy).toFixed(2);
+          dom.seedResA2A10.textContent = `A1(${res.A1.x.toFixed(2)}, ${res.A1.y.toFixed(2)}) ➔ B1(${res.B1.x.toFixed(2)}, ${res.B1.y.toFixed(2)}) ➔ G1(${g1X}, ${g1Y}) | A2(${res.A2.x.toFixed(2)}, ${res.A2.y.toFixed(2)}) ➔ A10(${a10X}, ${a10Y}) | B2(${res.B2.x.toFixed(2)}, ${res.B2.y.toFixed(2)})`;
+        } else {
+          const a10X = (xA1 + 9 * res.Ux).toFixed(2);
+          const a10Y = (yA1 + 9 * res.Uy).toFixed(2);
+          dom.seedResA2A10.textContent = `A1(${res.A1.x.toFixed(2)}, ${res.A1.y.toFixed(2)}) ➔ A2(${res.A2.x.toFixed(2)}, ${res.A2.y.toFixed(2)}) ➔ A10(${a10X}, ${a10Y}) | B1(${res.B1.x.toFixed(2)}, ${res.B1.y.toFixed(2)}) | B2(${res.B2.x.toFixed(2)}, ${res.B2.y.toFixed(2)})`;
+        }
       }
     } else {
       if (dom.seedResAlpha) dom.seedResAlpha.textContent = 'Error: ' + res.error;
@@ -1974,7 +2098,8 @@
         dCol, dFila, d1, d2, xA1, yA1,
         refMode: state.seedRefMode || 'dual_inclinado',
         reparto,
-        xB1, yA2
+        xB1, yA2,
+        namingMode: state.seedNamingMode || 'letters_on_base'
       });
 
       if (!seedRes.success) {
@@ -1983,6 +2108,7 @@
       }
 
       s.meshMode = 'seed';
+      s.seedNamingMode = state.seedNamingMode || 'letters_on_base';
       s.seedDCol = dCol;
       s.seedDFila = dFila;
       s.seedD1 = d1;
@@ -2001,11 +2127,29 @@
       s.dx = dCol;
       s.dy = dFila;
 
-      const rowCounts = rowPattern
-        ? rowPattern.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n) && n > 0)
-        : [];
-      s.rows = rowCounts.length > 0 ? rowCounts.length : rows;
-      s.cols = rowCounts.length > 0 ? Math.max(...rowCounts) : cols;
+      const parsed = window.TopoMath.parseStakePattern(rowPattern);
+      if (state.seedNamingMode === 'letters_on_base') {
+        let nLetters = rows;
+        let mCols = cols;
+        if (parsed.isLetterMapped) {
+          for (const letChar of Object.keys(parsed.letterMap)) {
+            const idx = window.TopoMath.letterToRow(letChar);
+            if (idx >= 0 && idx + 1 > nLetters) nLetters = idx + 1;
+          }
+          mCols = Math.max(...Object.values(parsed.letterMap), cols);
+        } else if (parsed.counts.length > 0) {
+          nLetters = parsed.counts.length;
+          mCols = Math.max(...parsed.counts, cols);
+        }
+        s.rows = nLetters;
+        s.cols = mCols;
+      } else {
+        const rowCounts = parsed.counts.length > 0
+          ? parsed.counts
+          : (parsed.isLetterMapped ? Object.values(parsed.letterMap) : []);
+        s.rows = rowCounts.length > 0 ? rowCounts.length : rows;
+        s.cols = rowCounts.length > 0 ? Math.max(...rowCounts) : cols;
+      }
 
       rawStakes = window.TopoMath.generateSeedFrameMesh(state.project.id, seedRes, s);
     } else if (state.configMode === 'tape') {
@@ -3322,6 +3466,7 @@
     if (dom.seedAlignCenterBtn) dom.seedAlignCenterBtn.addEventListener('click', () => selectSeedAlignment('center'));
     if (dom.seedAlignLeftBtn) dom.seedAlignLeftBtn.addEventListener('click', () => selectSeedAlignment('left'));
     if (dom.seedAlignRightBtn) dom.seedAlignRightBtn.addEventListener('click', () => selectSeedAlignment('right'));
+    if (dom.seedToggleTransposeBtn) dom.seedToggleTransposeBtn.addEventListener('click', toggleSeedNamingMode);
 
     // Entradas dinámicas modo cinta métrica
     const tapeInputs = [dom.tapeL12, dom.tapeL23, dom.tapeL34, dom.tapeL41, dom.tapeD13, dom.tapeD24];

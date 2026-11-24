@@ -322,17 +322,35 @@
               </div>
             </div>
 
-            <!-- 3. Giro global respecto a los Ejes X y Y -->
+            <!-- 3. Inclinación de AMBOS Taludes hacia Adentro respecto al Plano Cartesiano de 90° -->
             <label class="form-label" style="font-size: 0.88rem; color: #b45309; font-weight: 700;">
-              ③ Orientación del Rombo al Terreno:
+              ③ Inclinación de AMBOS Taludes (Despegue hacia adentro de los Ejes X y Y a 90°):
             </label>
             <div class="view-mode-bar" style="margin-bottom: 8px;">
-              <button type="button" id="seed-ref-talud-btn" class="view-mode-btn active" data-ref="talud_paralelo">
-                <span>Modo 1: Taludes Paralelos a la Malla (Por Defecto)</span>
+              <button type="button" id="seed-ref-dual-btn" class="view-mode-btn active" data-ref="dual_inclinado">
+                <span>Modo Dual: Ambos Taludes Inclinados (Por Defecto)</span>
               </button>
               <button type="button" id="seed-ref-ortogonal-btn" class="view-mode-btn" data-ref="ejes_ortogonales">
-                <span>Modo 2: Ejes X/Y a 90° con Giro (x_B1 a Eje Y)</span>
+                <span>Modo Medido: Desfase x_B1 a Eje Y</span>
               </button>
+            </div>
+
+            <!-- Control de Reparto de Inclinación entre Ejes (0% a 100%, 50% por defecto) -->
+            <div id="seed-grp-reparto" style="margin-bottom: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label class="form-label" for="seed-reparto-slider" style="margin-bottom: 0;">
+                  Reparto de Inclinación (δ = <span id="seed-res-delta-val">15.31°</span>):
+                </label>
+                <span id="seed-reparto-badge" class="badge" style="background-color: var(--primary-accent); color: #fff; font-size: 0.78rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;">
+                  50% Simétrico (+7.65° / 7.65°)
+                </span>
+              </div>
+              <input type="range" id="seed-reparto-slider" class="form-control" min="0" max="100" value="50" step="5" style="width: 100%; cursor: pointer;">
+              <div class="form-help" id="seed-reparto-help" style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 2px;">
+                <span>0% (Fila A plana a 0°)</span>
+                <span style="font-weight: 700; color: #0284c7;">50% (+7.65° en Fila A / 7.65° en Col 1)</span>
+                <span>100% (Col 1 vertical a 90°)</span>
+              </div>
             </div>
 
             <div class="form-grid-2" style="margin-bottom: 10px;">

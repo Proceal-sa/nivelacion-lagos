@@ -20,7 +20,8 @@
     activeViewMode: '2d', // '2d' | 'table'
     isEditMode: false,
     configMode: 'seed', // 'seed' | 'tape' | 'regular' | 'talud'
-    seedRefMode: 'talud_paralelo', // 'talud_paralelo' | 'ejes_ortogonales' | 'y_axis_xB1' | 'x_axis_yA2' | 'both_retires'
+    seedRefMode: 'dual_inclinado', // 'dual_inclinado' | 'ejes_ortogonales' | 'talud_paralelo'
+    seedReparto: 0.5,
     seedAlignment: 'center',
     tapeAlignment: 'center', // 'center' | 'left' | 'right'
     boxMode: 'stake', // 'stake' | 'tape'
@@ -106,11 +107,17 @@
     dom.seedD2 = document.getElementById('seed-d2');
     dom.seedXA1 = document.getElementById('seed-xa1');
     dom.seedYA1 = document.getElementById('seed-ya1');
+    dom.seedRefDualBtn = document.getElementById('seed-ref-dual-btn');
     dom.seedRefTaludBtn = document.getElementById('seed-ref-talud-btn');
     dom.seedRefOrtogonalBtn = document.getElementById('seed-ref-ortogonal-btn');
     dom.seedRefXb1Btn = document.getElementById('seed-ref-xb1-btn');
     dom.seedRefYa2Btn = document.getElementById('seed-ref-ya2-btn');
     dom.seedRefBothBtn = document.getElementById('seed-ref-both-btn');
+    dom.seedGrpReparto = document.getElementById('seed-grp-reparto');
+    dom.seedRepartoSlider = document.getElementById('seed-reparto-slider');
+    dom.seedRepartoBadge = document.getElementById('seed-reparto-badge');
+    dom.seedRepartoHelp = document.getElementById('seed-reparto-help');
+    dom.seedResDeltaVal = document.getElementById('seed-res-delta-val');
     dom.seedGrpXb1 = document.getElementById('seed-grp-xb1');
     dom.seedGrpYa2 = document.getElementById('seed-grp-ya2');
     dom.seedXB1 = document.getElementById('seed-xb1');
@@ -403,7 +410,8 @@
         seedD2: 18.20,
         seedXA1: 1.5,
         seedYA1: 1.5,
-        seedRefMode: 'talud_paralelo',
+        seedRefMode: 'dual_inclinado',
+        seedReparto: 0.5,
         seedXB1: 1.5,
         seedYA2: 5.48,
         seedRows: 7,
@@ -1134,40 +1142,69 @@
         ctx.fillText(`Fila A inclinada: ΔY = +${(lastA.y - firstA.y).toFixed(2)}m (θU = ${thetaUDeg >= 0 ? '+' : ''}${thetaUDeg.toFixed(1)}°)`, pLast.x + 10, pLast.y);
       }
 
-      // 1.4 Si está en Modo 1 (Taludes Paralelos a la Malla): Dibujar ambos bordes de talud a 1.5m
-      if (!sf.refMode || sf.refMode === 'talud_paralelo') {
-        const dpr = window.devicePixelRatio || 1;
-        ctx.strokeStyle = isDark ? '#38bdf8' : '#0284c7';
-        ctx.lineWidth = 2.5;
+      // 1.4 Dibujar AMBOS Taludes con flechas inclinadas hacia adentro despegándose del Eje X y Eje Y
+      const dpr = window.devicePixelRatio || 1;
+      const taludColor = isDark ? '#38bdf8' : '#0284c7';
+      ctx.strokeStyle = taludColor;
+      ctx.lineWidth = 3;
 
-        // Talud Base: corre por Y = 0 (paralelo a la Fila A que está a yA1)
-        const pTaludBase0 = transform.toPx(0, 0);
-        const pTaludBase1 = transform.toPx(transform.maxX, 0);
-        ctx.beginPath();
-        ctx.moveTo(pTaludBase0.x, pTaludBase0.y);
-        ctx.lineTo(pTaludBase1.x, pTaludBase1.y);
-        ctx.stroke();
+      // Talud Base: corre con inclinación theta_U despegado del Eje X (paralelo a Fila A a 1.50m)
+      const lenBase = Math.max(transform.maxX + 10, 140);
+      const endBaseX = lenBase * Math.cos(sf.thetaU);
+      const endBaseY = lenBase * Math.sin(sf.thetaU);
+      const pTaludBase0 = transform.toPx(0, 0);
+      const pTaludBase1 = transform.toPx(endBaseX, endBaseY);
 
-        ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
-        ctx.fillStyle = isDark ? '#38bdf8' : '#0284c7';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(`Talud Base (Borde Largo a ${yA1.toFixed(1)}m)`, pTaludBase1.x - 10, pTaludBase1.y - 6);
+      ctx.beginPath();
+      ctx.moveTo(pTaludBase0.x, pTaludBase0.y);
+      ctx.lineTo(pTaludBase1.x, pTaludBase1.y);
+      ctx.stroke();
 
-        // Talud Lateral: corre con inclinación alpha = 74.69° paralelo a la Columna 1 (A1->G1)
-        const yTop = transform.maxY;
-        const xTop = yTop / Math.tan(sf.alpha);
-        const pTaludLat0 = transform.toPx(0, 0);
-        const pTaludLat1 = transform.toPx(xTop, yTop);
-        ctx.beginPath();
-        ctx.moveTo(pTaludLat0.x, pTaludLat0.y);
-        ctx.lineTo(pTaludLat1.x, pTaludLat1.y);
-        ctx.stroke();
+      // Flecha en Talud Base
+      const dirBase = Math.atan2(pTaludBase1.y - pTaludBase0.y, pTaludBase1.x - pTaludBase0.x);
+      const arrowLenBase = 15 * dpr;
+      ctx.fillStyle = taludColor;
+      ctx.beginPath();
+      ctx.moveTo(pTaludBase1.x, pTaludBase1.y);
+      ctx.lineTo(pTaludBase1.x - arrowLenBase * Math.cos(dirBase - Math.PI / 7), pTaludBase1.y - arrowLenBase * Math.sin(dirBase - Math.PI / 7));
+      ctx.lineTo(pTaludBase1.x - arrowLenBase * Math.cos(dirBase + Math.PI / 7), pTaludBase1.y - arrowLenBase * Math.sin(dirBase + Math.PI / 7));
+      ctx.closePath();
+      ctx.fill();
 
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(`Talud Lateral (Ancho inclinado ${sf.alphaDeg.toFixed(1)}° a ${xA1.toFixed(1)}m)`, pTaludLat1.x + 8, pTaludLat1.y - 6);
-      }
+      // Rótulo Talud Base
+      ctx.font = `bold ${Math.max(9, 10 * dpr)}px sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`Talud Base (+${sf.thetaUDeg.toFixed(1)}° despegado de Eje X, a ${yA1.toFixed(2)}m de Fila A)`, pTaludBase1.x + 8, pTaludBase1.y);
+
+      // Talud Lateral: corre con inclinación theta_V despegado del Eje Y (paralelo a Columna 1 a 1.50m)
+      const lenLat = Math.max(transform.maxY + 10, 100);
+      const endLatX = lenLat * Math.cos(sf.thetaV);
+      const endLatY = lenLat * Math.sin(sf.thetaV);
+      const pTaludLat0 = transform.toPx(0, 0);
+      const pTaludLat1 = transform.toPx(endLatX, endLatY);
+
+      ctx.beginPath();
+      ctx.moveTo(pTaludLat0.x, pTaludLat0.y);
+      ctx.lineTo(pTaludLat1.x, pTaludLat1.y);
+      ctx.stroke();
+
+      // Flecha en Talud Lateral
+      const dirLat = Math.atan2(pTaludLat1.y - pTaludLat0.y, pTaludLat1.x - pTaludLat0.x);
+      const arrowLenLat = 15 * dpr;
+      ctx.fillStyle = taludColor;
+      ctx.beginPath();
+      ctx.moveTo(pTaludLat1.x, pTaludLat1.y);
+      ctx.lineTo(pTaludLat1.x - arrowLenLat * Math.cos(dirLat - Math.PI / 7), pTaludLat1.y - arrowLenLat * Math.sin(dirLat - Math.PI / 7));
+      ctx.lineTo(pTaludLat1.x - arrowLenLat * Math.cos(dirLat + Math.PI / 7), pTaludLat1.y - arrowLenLat * Math.sin(dirLat + Math.PI / 7));
+      ctx.closePath();
+      ctx.fill();
+
+      // Rótulo Talud Lateral
+      const despegueY = (90 - sf.thetaVDeg).toFixed(1);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`Talud Lateral (${despegueY}° despegado de Eje Y, a ${xA1.toFixed(2)}m de Col 1)`, pTaludLat1.x + 8, pTaludLat1.y);
     }
 
     // 1.5 Dibujar Cuadrilátero Exterior con Cinta (si existe en modo tape)
@@ -1596,15 +1633,16 @@
     if (dom.seedDFila) dom.seedDFila.value = s.seedDFila ?? 15.0;
     if (dom.seedD1) dom.seedD1.value = s.seedD1 ?? 23.85;
     if (dom.seedD2) dom.seedD2.value = s.seedD2 ?? 18.20;
-    if (dom.seedXA1) dom.seedXA1.value = s.seedXA1 ?? 1.0;
-    if (dom.seedYA1) dom.seedYA1.value = s.seedYA1 ?? 2.0;
+    if (dom.seedXA1) dom.seedXA1.value = s.seedXA1 ?? 1.5;
+    if (dom.seedYA1) dom.seedYA1.value = s.seedYA1 ?? 1.5;
     if (dom.seedXB1) dom.seedXB1.value = s.seedXB1 ?? 1.5;
     if (dom.seedYA2) dom.seedYA2.value = s.seedYA2 ?? 5.48;
+    if (dom.seedRepartoSlider) dom.seedRepartoSlider.value = Math.round((s.seedReparto ?? 0.5) * 100);
     if (dom.seedRows) dom.seedRows.value = s.seedRows ?? 7;
     if (dom.seedCols) dom.seedCols.value = s.seedCols ?? 10;
     if (dom.seedRowPattern) dom.seedRowPattern.value = s.seedRowPattern || '';
 
-    selectSeedRefMode(s.seedRefMode || 'talud_paralelo');
+    selectSeedRefMode(s.seedRefMode || 'dual_inclinado');
     selectSeedAlignment(s.seedAlignment || 'center');
     updateSeedFramePreview();
 
@@ -1672,30 +1710,39 @@
     const d2 = parseFloat(dom.seedD2.value) || 18.20;
     const xA1 = parseFloat(dom.seedXA1 ? dom.seedXA1.value : 1.5) || 1.5;
     const yA1 = parseFloat(dom.seedYA1 ? dom.seedYA1.value : 1.5) || 1.5;
+    const repartoPct = dom.seedRepartoSlider ? parseFloat(dom.seedRepartoSlider.value) : 50;
+    const reparto = repartoPct / 100;
     const xB1 = parseFloat(dom.seedXB1 ? dom.seedXB1.value : 1.5) || 1.5;
     const yA2 = parseFloat(dom.seedYA2 ? dom.seedYA2.value : 5.48) || 5.48;
 
     const res = window.TopoMath.solveSeedFrameVectorial({
       dCol, dFila, d1, d2, xA1, yA1,
-      refMode: state.seedRefMode || 'talud_paralelo',
+      refMode: state.seedRefMode || 'dual_inclinado',
+      reparto,
       xB1, yA2
     });
 
     if (res.success) {
+      if (dom.seedResDeltaVal) {
+        dom.seedResDeltaVal.textContent = `${res.deltaDeg.toFixed(2)}°`;
+      }
+      if (dom.seedRepartoBadge) {
+        dom.seedRepartoBadge.textContent = `${repartoPct}% (+${res.despegueXDeg.toFixed(2)}° X / ${res.despegueYDeg.toFixed(2)}° Y)`;
+      }
       if (dom.seedResAlpha) {
-        dom.seedResAlpha.textContent = `${res.alphaDeg.toFixed(2)}° (cos1=${res.cos1.toFixed(3)}, cos2=${res.cos2.toFixed(3)})`;
+        dom.seedResAlpha.textContent = `${res.alphaDeg.toFixed(2)}° (δ=${res.deltaDeg.toFixed(2)}°)`;
       }
       if (dom.seedResThetaU) {
-        dom.seedResThetaU.textContent = `${res.thetaUDeg >= 0 ? '+' : ''}${res.thetaUDeg.toFixed(2)}° (${Math.abs(res.thetaUDeg) > 0.01 ? 'Inclinado respecto a X' : 'Paralelo'})`;
+        dom.seedResThetaU.textContent = `+${res.thetaUDeg.toFixed(2)}° (Despegue Eje X)`;
       }
       if (dom.seedResThetaV) {
-        dom.seedResThetaV.textContent = `${res.thetaVDeg >= 0 ? '+' : ''}${res.thetaVDeg.toFixed(2)}°`;
+        dom.seedResThetaV.textContent = `${res.thetaVDeg.toFixed(2)}° (${res.despegueYDeg.toFixed(2)}° despegado de Eje Y)`;
       }
       if (dom.seedResVecU) {
-        dom.seedResVecU.textContent = `Ux=${res.Ux.toFixed(3)}m, Uy=${res.Uy.toFixed(3)}m`;
+        dom.seedResVecU.textContent = `Ux=${res.Ux.toFixed(2)}m, Uy=${res.Uy.toFixed(2)}m`;
       }
       if (dom.seedResVecV) {
-        dom.seedResVecV.textContent = `Vx=${res.Vx.toFixed(3)}m, Vy=${res.Vy.toFixed(3)}m`;
+        dom.seedResVecV.textContent = `Vx=${res.Vx.toFixed(2)}m, Vy=${res.Vy.toFixed(2)}m`;
       }
       if (dom.seedResA2A10) {
         const a10X = (xA1 + 9 * res.Ux).toFixed(2);
@@ -1709,16 +1756,18 @@
 
   function selectSeedRefMode(refMode) {
     state.seedRefMode = refMode;
-    const isTalud = refMode === 'talud_paralelo';
+    const isDual = refMode === 'dual_inclinado' || refMode === 'talud_paralelo';
     const isOrtogonal = refMode === 'ejes_ortogonales' || refMode === 'y_axis_xB1';
 
-    if (dom.seedRefTaludBtn) dom.seedRefTaludBtn.classList.toggle('active', isTalud);
+    if (dom.seedRefDualBtn) dom.seedRefDualBtn.classList.toggle('active', isDual);
+    if (dom.seedRefTaludBtn) dom.seedRefTaludBtn.classList.toggle('active', isDual);
     if (dom.seedRefOrtogonalBtn) dom.seedRefOrtogonalBtn.classList.toggle('active', isOrtogonal);
-    if (dom.seedRefXb1Btn) dom.seedRefXb1Btn.classList.toggle('active', refMode === 'y_axis_xB1');
+    if (dom.seedRefXb1Btn) dom.seedRefXb1Btn.classList.toggle('active', isOrtogonal);
     if (dom.seedRefYa2Btn) dom.seedRefYa2Btn.classList.toggle('active', refMode === 'x_axis_yA2');
     if (dom.seedRefBothBtn) dom.seedRefBothBtn.classList.toggle('active', refMode === 'both_retires');
 
-    if (dom.seedGrpXb1) dom.seedGrpXb1.style.display = (isOrtogonal || refMode === 'both_retires') ? 'block' : 'none';
+    if (dom.seedGrpReparto) dom.seedGrpReparto.style.display = isDual ? 'block' : 'none';
+    if (dom.seedGrpXb1) dom.seedGrpXb1.style.display = isOrtogonal ? 'block' : 'none';
     if (dom.seedGrpYa2) dom.seedGrpYa2.style.display = (refMode === 'x_axis_yA2' || refMode === 'both_retires') ? 'block' : 'none';
 
     updateSeedFramePreview();
@@ -1911,8 +1960,9 @@
       const dFila = parseFloat(dom.seedDFila.value) || 15.0;
       const d1 = parseFloat(dom.seedD1.value) || 23.85;
       const d2 = parseFloat(dom.seedD2.value) || 18.20;
-      const xA1 = parseFloat(dom.seedXA1 ? dom.seedXA1.value : 1.0) || 1.0;
-      const yA1 = parseFloat(dom.seedYA1 ? dom.seedYA1.value : 2.0) || 2.0;
+      const xA1 = parseFloat(dom.seedXA1 ? dom.seedXA1.value : 1.5) || 1.5;
+      const yA1 = parseFloat(dom.seedYA1 ? dom.seedYA1.value : 1.5) || 1.5;
+      const reparto = dom.seedRepartoSlider ? parseFloat(dom.seedRepartoSlider.value) / 100 : 0.5;
       const xB1 = parseFloat(dom.seedXB1 ? dom.seedXB1.value : 1.5) || 1.5;
       const yA2 = parseFloat(dom.seedYA2 ? dom.seedYA2.value : 5.48) || 5.48;
       const rows = parseInt(dom.seedRows.value, 10) || 7;
@@ -1922,7 +1972,8 @@
 
       const seedRes = window.TopoMath.solveSeedFrameVectorial({
         dCol, dFila, d1, d2, xA1, yA1,
-        refMode: state.seedRefMode || 'talud_paralelo',
+        refMode: state.seedRefMode || 'dual_inclinado',
+        reparto,
         xB1, yA2
       });
 
@@ -1939,6 +1990,7 @@
       s.seedXA1 = xA1;
       s.seedYA1 = yA1;
       s.seedRefMode = state.seedRefMode;
+      s.seedReparto = reparto;
       s.seedXB1 = xB1;
       s.seedYA2 = yA2;
       s.seedRows = rows;
@@ -3251,11 +3303,16 @@
     if (dom.cfgModeTaludBtn) dom.cfgModeTaludBtn.addEventListener('click', () => setConfigMode('talud'));
 
     // Entradas dinámicas modo cuadro semilla vectorial
-    if (dom.seedRefTaludBtn) dom.seedRefTaludBtn.addEventListener('click', () => selectSeedRefMode('talud_paralelo'));
+    if (dom.seedRefDualBtn) dom.seedRefDualBtn.addEventListener('click', () => selectSeedRefMode('dual_inclinado'));
+    if (dom.seedRefTaludBtn) dom.seedRefTaludBtn.addEventListener('click', () => selectSeedRefMode('dual_inclinado'));
     if (dom.seedRefOrtogonalBtn) dom.seedRefOrtogonalBtn.addEventListener('click', () => selectSeedRefMode('ejes_ortogonales'));
     if (dom.seedRefXb1Btn) dom.seedRefXb1Btn.addEventListener('click', () => selectSeedRefMode('ejes_ortogonales'));
     if (dom.seedRefYa2Btn) dom.seedRefYa2Btn.addEventListener('click', () => selectSeedRefMode('x_axis_yA2'));
     if (dom.seedRefBothBtn) dom.seedRefBothBtn.addEventListener('click', () => selectSeedRefMode('both_retires'));
+
+    if (dom.seedRepartoSlider) {
+      dom.seedRepartoSlider.addEventListener('input', updateSeedFramePreview);
+    }
 
     const seedInputs = [dom.seedDCol, dom.seedDFila, dom.seedD1, dom.seedD2, dom.seedXA1, dom.seedYA1, dom.seedXB1, dom.seedYA2];
     seedInputs.forEach(el => {
@@ -3690,8 +3747,11 @@
     const tag = dom.offPointTag.value.trim() || 'Punto Desfase';
     const dx = parseFloat(dom.offDxInput.value) || 0;
     const dy = parseFloat(dom.offDyInput.value) || 0;
-    const targetX = baseStake.x + dx;
-    const targetY = baseStake.y + dy;
+
+    // Orientar desfase a lo largo de los vectores reales de filas y columnas del lago (U, V)
+    const { uRow, uCol } = getLocalRowColVectors(baseStake);
+    const targetX = baseStake.x + (dx * uRow.x) + (dy * uCol.x);
+    const targetY = baseStake.y + (dx * uRow.y) + (dy * uCol.y);
 
     const calcResult = window.TopoMath.calculateDesignElevationAtCoord(targetX, targetY, state.project.settings, state.stakes);
     const designZ = calcResult.elevation;

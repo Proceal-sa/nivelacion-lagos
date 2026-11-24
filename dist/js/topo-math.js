@@ -638,7 +638,8 @@ const TopoMath = {
     const d2 = Number(params.d2 !== undefined ? params.d2 : (params.seedD2 !== undefined ? params.seedD2 : 18.20)); // diagonal corta A2->B1
     const xA1 = Number(params.xA1 !== undefined ? params.xA1 : (params.seedXA1 !== undefined ? params.seedXA1 : 1.5));
     const yA1 = Number(params.yA1 !== undefined ? params.yA1 : (params.seedYA1 !== undefined ? params.seedYA1 : 1.5));
-    const refMode = params.refMode || params.seedRefMode || 'talud_paralelo'; // 'talud_paralelo' (Modo 1) | 'ejes_ortogonales' (Modo 2)
+    const refMode = params.refMode || params.seedRefMode || 'dual_inclinado';
+    const reparto = Number(params.reparto !== undefined ? params.reparto : (params.seedReparto !== undefined ? params.seedReparto : 0.5));
     const xB1 = Number(params.xB1 !== undefined ? params.xB1 : (params.seedXB1 !== undefined ? params.seedXB1 : 1.5));
     const yA2 = Number(params.yA2 !== undefined ? params.yA2 : (params.seedYA2 !== undefined ? params.seedYA2 : 1.5));
 
@@ -662,16 +663,19 @@ const TopoMath = {
     const calcD1 = Math.sqrt(Math.max(0, dCol * dCol + dFila * dFila + 2 * dCol * dFila * cosAlpha1));
     const closureErrorM = Math.abs(d1 - calcD1);
 
+    // Convergencia total de ambos taludes respecto al plano cartesiano a 90° (Math.PI / 2):
+    const delta = (Math.PI / 2) - alpha; // ~15.31°
+    const deltaDeg = delta * 180 / Math.PI;
+
     let thetaU = 0;
     let thetaV = 0;
 
     if (refMode === 'ejes_ortogonales' || refMode === 'y_axis_xB1') {
-      // Modo 2: Ejes X/Y ortogonales a 90° con giro
-      // Si x_B1 se mide contra un Eje Y vertical de 90°:
+      // Modo con retiro medido x_B1 a Eje Y
       const Vx_diff = xB1 - xA1;
       const Vy_calc = Math.sqrt(Math.max(0, dFila * dFila - Vx_diff * Vx_diff));
-      thetaV = Math.atan2(Vy_calc, Vx_diff); // ~90° o 88°
-      thetaU = thetaV - alpha; // (+15.31° hacia ARRIBA en Y positivo, ¡NUNCA cayendo hacia abajo ni metiendo C1/D1 en X negativo!)
+      thetaV = Math.atan2(Vy_calc, Vx_diff);
+      thetaU = thetaV - alpha;
     } else if (refMode === 'x_axis_yA2') {
       const Uy_diff = yA2 - yA1;
       const Ux_calc = Math.sqrt(Math.max(0, dCol * dCol - Uy_diff * Uy_diff));
@@ -684,12 +688,15 @@ const TopoMath = {
       const Vx_diff = xB1 - xA1;
       const Vy_calc = Math.sqrt(Math.max(0, dFila * dFila - Vx_diff * Vx_diff));
       thetaV = Math.atan2(Vy_calc, Vx_diff);
-    } else {
-      // Modo 1 (Taludes paralelos a la malla a 1.5m - Por defecto):
-      // El Talud Base (Eje X) va paralelo a A1->A2 (theta_U = 0°, todas las A a 1.5m del talud largo)
-      // y el Talud Lateral (también inclinado a 74.69°) va paralelo a A1->G1:
+    } else if (refMode === 'talud_paralelo_base') {
       thetaU = 0;
-      thetaV = alpha; // 74.69°
+      thetaV = alpha;
+    } else {
+      // MODO PREDETERMINADO: Inclinación Dual de AMBOS taludes dentro del plano X, Y de 90°
+      // Reparte delta en ambos ejes según reparto (0.5 por defecto = 50% en X, 50% en Y)
+      const rClamped = clamp(Number(reparto), 0, 1);
+      thetaU = delta * rClamped; // +7.65° con reparto = 0.5
+      thetaV = thetaU + alpha;   // 82.35° respecto a X (7.65° despegado de Eje Y)
     }
 
     // 3. Vectores inclinados U y V en el plano cartesiano topográfico
@@ -710,6 +717,7 @@ const TopoMath = {
     return {
       success: true,
       refMode,
+      reparto: clamp(Number(reparto), 0, 1),
       dCol,
       dFila,
       d1,
@@ -720,10 +728,14 @@ const TopoMath = {
       yA2: Math.round(A2.y * 1000) / 1000,
       alpha,
       alphaDeg: Math.round(alphaDeg * 100) / 100,
+      delta,
+      deltaDeg: Math.round(deltaDeg * 100) / 100,
       thetaU,
       thetaUDeg: Math.round(thetaUDeg * 100) / 100,
       thetaV,
       thetaVDeg: Math.round(thetaVDeg * 100) / 100,
+      despegueXDeg: Math.round(thetaUDeg * 100) / 100,
+      despegueYDeg: Math.round((90 - thetaVDeg) * 100) / 100,
       cosAlpha1: Math.round(cosAlpha1 * 1000) / 1000,
       cosAlpha2: Math.round(cosAlpha2 * 1000) / 1000,
       cos1: Math.round(cosAlpha2 * 1000) / 1000,
